@@ -1,0 +1,4 @@
+struct hitPayload {
+    uint illume; 
+};
+

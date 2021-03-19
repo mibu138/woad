@@ -1,0 +1,61 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_GOOGLE_include_directive : enable
+
+#include "shadow-common.glsl"
+#include "lights.glsl"
+
+layout(set = 1, binding = 0, rgba32f) readonly uniform image2D imageP;
+layout(set = 1, binding = 1, rgba32f) readonly uniform image2D imageN;
+layout(set = 1, binding = 3, r16ui) uniform uimage2D imageShadow;
+layout(set = 1, binding = 5) uniform accelerationStructureEXT topLevelAS;
+
+layout(location = 0) rayPayloadEXT hitPayload payload;
+
+layout(push_constant) uniform PushConstant {
+    layout(offset = 8) uint     lightCount;
+} push;
+
+void main()
+{
+    vec3 pos = imageLoad(imageP, ivec2(gl_LaunchIDEXT.xy)).xyz;
+    vec3 N = imageLoad(imageN, ivec2(gl_LaunchIDEXT.xy)).xyz;
+    pos += N * 0.001;
+
+    uint rayFlags = gl_RayFlagsOpaqueEXT;
+    float tMin    = 0.0005;
+    float tMax    = 100;
+
+    uint shadowMask = 0x0;
+
+    for (int i = 0; i < push.lightCount; i++)
+    {
+        const Light light = lights.light[i];
+        vec3 dir;
+        if (light.type == POINT_LIGHT)
+        {
+            tMax = 1;
+            dir = light.vector - pos;
+        }
+        else
+            dir = light.vector * -1; //direction light
+
+        traceRayEXT(
+                topLevelAS,
+                rayFlags,
+                0xFF,
+                0,
+                0,
+                0,
+                pos,
+                tMin,
+                dir,
+                tMax,
+                0);
+
+        shadowMask |= (payload.illume << i);
+    }
+
+
+    imageStore(imageShadow, ivec2(gl_LaunchIDEXT.xy), uvec4(shadowMask, 0, 0, 0));
+}
