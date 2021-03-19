@@ -1,1 +1,1 @@
-../obsidian/shaders/common.glsl
+/home/michaelb/dev/obsidian/shaders/common.glsl

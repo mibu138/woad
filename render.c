@@ -22,7 +22,7 @@
 #include <obsidian/r_api.h>
 #include <vulkan/vulkan_core.h>
 
-#define SPVDIR "./shaders/spv"
+#define SPVDIR "/home/michaelb/dev/tanto/shaders/spv"
 
 typedef Obdn_V_Command               Command;
 typedef Obdn_V_Image                 Image;
@@ -1063,7 +1063,7 @@ static void syncScene(const uint32_t frameIndex)
     if (texturesNeedUpdate) // TODO update all tex
     {
         printf("texturesNeedUpdate %d\n", texturesNeedUpdate);
-        for (int i = 0; i < scene->textureCount; i++) 
+        for (int i = 1; i <= scene->textureCount; i++)  // remember, 1 is the first valid texture index
         {
             updateTexture(frameIndex, &scene->textures[i].devImage, i);
         }
@@ -1129,6 +1129,7 @@ void r_CleanUp(void)
     }
     if (tlas.bufferRegion.size != 0)
         obdn_r_DestroyAccelerationStruct(&tlas);
+    obdn_r_DestroyShaderBindingTable(&shaderBindingTable);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         obdn_v_DestroyCommand(renderCommands[i]);

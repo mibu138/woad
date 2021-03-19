@@ -9,7 +9,7 @@ LIB = $(HOME)/lib
 LIBNAME = tanto
 DEV = $(HOME)/dev
 
-O = .
+O = build
 GLSL = shaders
 SPV  = shaders/spv
 
@@ -37,7 +37,7 @@ RMISS := $(patsubst %.rmiss,$(SPV)/%-rmiss.spv,$(notdir $(wildcard $(GLSL)/*.rmi
 shaders: $(FRAG) $(VERT) $(RGEN) $(RCHIT) $(RMISS)
 
 clean: 
-	rm -f $(O)/*.o $(LIB)/$(LIBNAME) $(BIN)/* $(SPV)/*
+	rm -f $(O)/*.o $(LIB)/$(LIBNAME) $(SPV)/*
 
 tags:
 	ctags -R .
