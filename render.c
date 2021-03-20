@@ -21,6 +21,7 @@
 #include <obsidian/v_command.h>
 #include <obsidian/r_api.h>
 #include <vulkan/vulkan_core.h>
+#include <obsidian/v_private.h>
 
 #define SPVDIR "/home/michaelb/dev/tanto/shaders/spv"
 
@@ -209,6 +210,7 @@ static void initRenderPass(void)
         VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
         obdn_v_GetSwapFormat(), obdn_r_GetDepthFormat(), &renderpass);
+    printf("Created renderpass 1...\n");
 
     // gbuffer renderpass
     {
@@ -346,6 +348,7 @@ static void initRenderPass(void)
         V_ASSERT(
             vkCreateRenderPass(device, &rpiInfo, NULL, &gbufferRenderPass));
     }
+    printf("Created renderpass 2...\n");
 
     obdn_r_CreateRenderPass_Color(VK_IMAGE_LAYOUT_UNDEFINED,
                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -932,7 +935,6 @@ static void updateRenderCommands(const uint32_t frameIndex)
     obdn_v_EndCommandBuffer(cmdBuf);
 }
 
-
 static void cleanUpSwapchainDependent(void)
 {
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
@@ -1091,11 +1093,18 @@ void r_InitRenderer(const Obdn_S_Scene* scene_)
     }
 
     initAttachments();
+    V1_PRINT(">> Tanto: attachments initialized. \n");
     initRenderPass();
+    V1_PRINT(">> Tanto: renderpasses initialized. \n");
     initFramebuffers();
+    V1_PRINT(">> Tanto: framebuffers initialized. \n");
     initDescriptorSetsAndPipelineLayouts();
+    V1_PRINT(">> Tanto: descriptor sets and pipeline layouts initialized. \n");
     updateDescriptors();
+    V1_PRINT(">> Tanto: descriptors updated. \n");
     initPipelines();
+    V1_PRINT(">> Tanto: pipelines initialized. \n");
+    V1_PRINT(">> Tanto: initialization complete. \n");
 }
 
 VkSemaphore r_Render(uint32_t f, VkSemaphore waitSemephore)

@@ -5,7 +5,7 @@ CFLAGS = -Wall -Wno-missing-braces -Wno-attributes -fPIC
 LDFLAGS = -L/opt/hfs18.0/dsolib -L$(HOME)/lib
 INFLAGS = -I$(HOME)/dev
 GLFLAGS = --target-env=vulkan1.2
-LIB = $(HOME)/lib
+LIBS = -lobsidian -lvulkan -lcoal
 LIBNAME = tanto
 DEV = $(HOME)/dev
 
@@ -37,7 +37,7 @@ RMISS := $(patsubst %.rmiss,$(SPV)/%-rmiss.spv,$(notdir $(wildcard $(GLSL)/*.rmi
 shaders: $(FRAG) $(VERT) $(RGEN) $(RCHIT) $(RMISS)
 
 clean: 
-	rm -f $(O)/*.o $(LIB)/$(LIBNAME) $(SPV)/*
+	rm -f $(O)/*.o $(LIBNAME).so $(LIB)/$(LIBNAME) $(SPV)/* 
 
 tags:
 	ctags -R .
@@ -51,13 +51,13 @@ coal:
 	make -C $(DEV)/coal
 
 tanto: $(O)/render.o 
-	$(CC) -shared -o tanto.so $<
+	$(CC) $(LDFLAGS) -shared -o tanto.so $< $(LIBS)
 
 bin: main.c $(OBJS) $(DEPS) shaders
 	$(CC) $(CFLAGS) $(INFLAGS) $(LDFLAGS) $(OBJS) $< -o $(BIN)/$(NAME) $(LIBS)
 
 lib: $(OBJS) $(DEPS) shaders
-	$(CC) -shared -o $(LIB)/lib$(LIBNAME).so $(OBJS)
+	$(CC) -shared -o $(LIB)/lib$(LIBNAME).so $(OBJS) 
 
 $(O)/%.o:  %.c $(DEPS)
 	$(CC) $(CFLAGS) $(INFLAGS) -c $< -o $@
