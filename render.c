@@ -22,6 +22,7 @@
 #include <obsidian/r_api.h>
 #include <vulkan/vulkan_core.h>
 #include <obsidian/v_private.h>
+#include <obsidian/r_attribute.h>
 
 #define SPVDIR "/home/michaelb/dev/tanto/shaders/spv"
 
@@ -32,6 +33,18 @@ typedef Obdn_S_Material              Material;
 typedef Obdn_V_BufferRegion          BufferRegion;
 typedef Obdn_R_AccelerationStructure AccelerationStructure;
 typedef Obdn_R_Primitive             Prim;
+
+typedef Obdn_Mask AttrMask;
+
+enum {
+    POS_BIT    = 1 << 0,
+    NORMAL_BIT = 1 << 1,
+    UV_BIT     = 1 << 2,
+    TAN_BIT    = 1 << 3,
+};
+
+#define POS_NOR_UV_TAN_MASK (POS_BIT | NORMAL_BIT | UV_BIT | TAN_BIT)
+#define POS_NOR_UV_MASK     (POS_BIT | NORMAL_BIT | UV_BIT)
 
 enum {
     PIPE_LAYOUT_MAIN,
@@ -853,11 +866,29 @@ static void sortPipelinePrims(void)
     }
     for (Obdn_S_PrimId primId = 0; primId < scene->primCount; primId++) 
     {
+        AttrMask attrMask = 0;
         const Obdn_R_Primitive* prim = &scene->prims[primId].rprim;
-        if (strcmp(prim->attrNames[3], "tan") == 0)
+        for (int i = 0; i < prim->attrCount; i++)
+        {
+            const char* name = prim->attrNames[i];
+            if (strcmp(name, POS_NAME) == 0)
+                attrMask |= POS_BIT;
+            if (strcmp(name, NORMAL_NAME) == 0)
+                attrMask |= NORMAL_BIT;
+            if (strcmp(name, UV_NAME) == 0)
+                attrMask |= UV_BIT;
+            if (strcmp(name, TANGENT_NAME) == 0)
+                attrMask |= TAN_BIT;
+        }
+        if (attrMask == POS_NOR_UV_TAN_MASK)
             obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV_TAN]); 
-        else
+        else if (attrMask == POS_NOR_UV_MASK)
             obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV]); 
+        else 
+        {
+            printf("Attributes not supported!\n");
+            assert(0);
+        }
         //if (mat->textureAlbedo && mat->textureRoughness && mat->textureNormal)
         //    addPrimToPipelinePrimList(primId, &pipelinePrimLists[PIPELINE_TAN]);
         //else if (mat->textureAlbedo && mat->textureRoughness)
