@@ -23,6 +23,7 @@
 #include <vulkan/vulkan_core.h>
 #include <obsidian/v_private.h>
 #include <obsidian/r_attribute.h>
+#include <obsidian/private.h>
 
 #define SPVDIR "/home/michaelb/dev/tanto/shaders/spv"
 
@@ -45,6 +46,7 @@ enum {
 
 #define POS_NOR_UV_TAN_MASK (POS_BIT | NORMAL_BIT | UV_BIT | TAN_BIT)
 #define POS_NOR_UV_MASK     (POS_BIT | NORMAL_BIT | UV_BIT)
+#define POS_MASK            (POS_BIT)
 
 enum {
     PIPE_LAYOUT_MAIN,
@@ -59,6 +61,7 @@ enum {
 enum {
     PIPELINE_GBUFFER_POS_NOR_UV,
     PIPELINE_GBUFFER_POS_NOR_UV_TAN,
+    PIPELINE_GBUFFER_POS,
     GBUFFER_PIPELINE_COUNT
 };
 
@@ -518,6 +521,7 @@ static void initDescriptorSetsAndPipelineLayouts(void)
 
 static void initPipelines(void)
 {
+    const Obdn_R_AttributeSize posAttrSizes[] = {12};
     const Obdn_R_AttributeSize posNormalUvAttrSizes[3] = {12, 12, 8};
     const Obdn_R_AttributeSize tangetPrimAttrSizes[4]  = {12, 12, 8, 12};
 
@@ -545,6 +549,17 @@ static void initPipelines(void)
         .vertexDescription = obdn_r_GetVertexDescription(4, tangetPrimAttrSizes),
         .vertShader = SPVDIR"/tangent-vert.spv",
         .fragShader = SPVDIR"/gbuffertan-frag.spv"
+    },{
+        .renderPass = gbufferRenderPass, 
+        .layout     = pipelineLayout,
+        .sampleCount = VK_SAMPLE_COUNT_1_BIT,
+        .frontFace   = VK_FRONT_FACE_CLOCKWISE,
+        .attachmentCount = 4,
+        .dynamicStateCount = OBDN_ARRAY_SIZE(dynamicStates),
+        .pDynamicStates = dynamicStates,
+        .vertexDescription = obdn_r_GetVertexDescription(LEN(posAttrSizes), posAttrSizes),
+        .vertShader = SPVDIR"/pos-vert.spv",
+        .fragShader = SPVDIR"/gbufferpos-frag.spv"
     }};
 
     const Obdn_R_GraphicsPipelineInfo defferedPipeInfo = {
@@ -884,7 +899,9 @@ static void sortPipelinePrims(void)
             obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV_TAN]); 
         else if (attrMask == POS_NOR_UV_MASK)
             obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV]); 
-        else 
+        else if (attrMask == POS_MASK)
+            obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_POS]); 
+        else
         {
             printf("Attributes not supported!\n");
             assert(0);

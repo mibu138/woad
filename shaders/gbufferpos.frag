@@ -5,9 +5,7 @@
 #include "material.glsl"
 
 layout(location = 0) in       vec3 worldPos;
-layout(location = 1) in       vec3 normal;
-layout(location = 2) in       vec2 uv;
-layout(location = 3) flat in  uint matId;
+layout(location = 1) flat in  uint matId;
 
 layout(location = 0) out vec4  outWorld;
 layout(location = 1) out vec4  outNormal;
@@ -22,11 +20,13 @@ layout(set = 0, binding = 4) uniform Materials {
 
 void main()
 {
-    const vec2 st = vec2(uv.x, -uv.y + 1);
     const Material mat = materials.mat[matId];
     outAlbedo = vec4(mat.r, mat.g, mat.b, 1);
     outRoughness = mat.roughness;
     outWorld  = vec4(worldPos, 1);
-    outNormal = vec4(normalize(normal), 1);
+    vec3 tanget = dFdx(worldPos);
+    vec3 bitang = dFdy(worldPos);
+    vec3 N = normalize(cross(bitang, tanget));
+    outNormal = vec4(N, 1); //wrong but for now...
 }
 
