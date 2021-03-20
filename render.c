@@ -44,8 +44,8 @@ enum {
 };
 
 enum {
-    PIPELINE_GBUFFER_NO_TAN,
-    PIPELINE_GBUFFER_TAN,
+    PIPELINE_GBUFFER_POS_NOR_UV,
+    PIPELINE_GBUFFER_POS_NOR_UV_TAN,
     GBUFFER_PIPELINE_COUNT
 };
 
@@ -505,7 +505,7 @@ static void initDescriptorSetsAndPipelineLayouts(void)
 
 static void initPipelines(void)
 {
-    const Obdn_R_AttributeSize regularPrimAttrSizes[3] = {12, 12, 8};
+    const Obdn_R_AttributeSize posNormalUvAttrSizes[3] = {12, 12, 8};
     const Obdn_R_AttributeSize tangetPrimAttrSizes[4]  = {12, 12, 8, 12};
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
@@ -516,7 +516,7 @@ static void initPipelines(void)
         .sampleCount = VK_SAMPLE_COUNT_1_BIT,
         .frontFace   = VK_FRONT_FACE_CLOCKWISE,
         .attachmentCount = 4,
-        .vertexDescription = obdn_r_GetVertexDescription(3, regularPrimAttrSizes),
+        .vertexDescription = obdn_r_GetVertexDescription(3, posNormalUvAttrSizes),
         .dynamicStateCount = OBDN_ARRAY_SIZE(dynamicStates),
         .pDynamicStates = dynamicStates,
         .vertShader = SPVDIR"/regular-vert.spv",
@@ -855,9 +855,9 @@ static void sortPipelinePrims(void)
     {
         const Obdn_R_Primitive* prim = &scene->prims[primId].rprim;
         if (strcmp(prim->attrNames[3], "tan") == 0)
-            obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_TAN]); 
+            obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV_TAN]); 
         else
-            obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_NO_TAN]); 
+            obdn_s_AddPrimToList(primId, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV]); 
         //if (mat->textureAlbedo && mat->textureRoughness && mat->textureNormal)
         //    addPrimToPipelinePrimList(primId, &pipelinePrimLists[PIPELINE_TAN]);
         //else if (mat->textureAlbedo && mat->textureRoughness)
