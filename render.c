@@ -142,7 +142,6 @@ static const VkFormat formatImageRoughness = VK_FORMAT_R16_UNORM;
 
 // declarations for overview and navigation
 static void initAttachments(void);
-static void initRenderPass(void);
 static void initFramebuffers(void);
 static void initDescriptorSetsAndPipelineLayouts(void);
 static void initPipelines(void);
@@ -156,7 +155,7 @@ static void syncScene(const uint32_t frameIndex);
 
 static Obdn_R_Import ri;
 
-void        r_InitRenderer(const Obdn_S_Scene* scene);
+void        r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout);
 VkSemaphore r_Render(uint32_t frameIndex, VkSemaphore waitSemephore); 
 void        r_CleanUp(void);
 uint8_t     r_GetMaxFramesInFlight(void) { return MAX_FRAMES_IN_FLIGHT; }
@@ -217,7 +216,7 @@ static void initAttachments(void)
     obdn_v_TransitionImageLayout(imageShadow.layout, VK_IMAGE_LAYOUT_GENERAL, &imageShadow);
 }
 
-static void initRenderPass(void)
+static void initRenderPass(VkImageLayout finalImageLayout)
 {
     obdn_r_CreateRenderPass_ColorDepth(
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -367,7 +366,7 @@ static void initRenderPass(void)
     printf("Created renderpass 2...\n");
 
     obdn_r_CreateRenderPass_Color(VK_IMAGE_LAYOUT_UNDEFINED,
-                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                  finalImageLayout,
                                   VK_ATTACHMENT_LOAD_OP_CLEAR,
                                   obdn_v_GetSwapFormat(), &deferredRenderPass);
 }
@@ -798,7 +797,7 @@ static void updateTexture(const uint32_t frameIndex, const Obdn_V_Image* img, co
 
 static void generateGBuffer(VkCommandBuffer cmdBuf, const uint32_t frameIndex)
 {
-    VkClearValue clearValueColor = {0.0f, 0.0f, 0.0f, 0.0f};
+    VkClearValue clearValueColor = {1.0f, 0.0f, 0.0f, 0.0f};
     VkClearValue clearValueMatid = {0};
     VkClearValue clearValueDepth = {1.0, 0};
 
@@ -853,7 +852,7 @@ static void shadowPass(VkCommandBuffer cmdBuf, const uint32_t frameIndex)
 
 static void deferredRender(VkCommandBuffer cmdBuf, const uint32_t frameIndex)
 {
-    VkClearValue clearValueColor = {0.0f, 0.0f, 0.0f, 0.0f};
+    VkClearValue clearValueColor = {1.0f, 0.0f, 0.0f, 0.0f};
 
     VkRenderPassBeginInfo rpassInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -932,13 +931,25 @@ static void updateRenderCommands(const uint32_t frameIndex)
         0, 2, descriptions[frameIndex].descriptorSets,
         0, NULL);
 
+#if 0
     VkViewport viewport = {
-        .width = windowWidth,
-        .height = windowHeight,
+        .width = (float)windowWidth,
+        .height = -(float)windowHeight,
+        .minDepth = 0.0,
+        .maxDepth = 1.0,
+        .x = 0, .y = (float)windowHeight
+    };
+#else
+    VkViewport viewport = {
+        .width = (float)windowWidth,
+        .height = (float)windowHeight,
         .minDepth = 0.0,
         .maxDepth = 1.0,
         .x = 0, .y = 0
     };
+#endif
+
+    printf("Viewport: w %f, h %f\n", viewport.width, viewport.height);
 
     VkRect2D scissor = {
         .extent = {windowWidth, windowHeight},
@@ -976,7 +987,10 @@ static void updateRenderCommands(const uint32_t frameIndex)
         0, 2, descriptions[frameIndex].descriptorSets,
         0, NULL);
 
-    vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
+    //viewport.height = 0,
+    //viewport.y = -(float)windowHeight;
+
+    //vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 
     deferredRender(cmdBuf, frameIndex);
 
@@ -1012,11 +1026,13 @@ static void onSwapchainRecreate(void)
 
 static void updateCamera(uint32_t index)
 {
-    const Mat4 proj = m_BuildPerspective(0.001, 100);
+    const Mat4 proj = scene->camera.proj;
     const Mat4 view = m_Invert4x4(&scene->camera.xform);
     Camera* uboCam = (Camera*)cameraBuffers[index].hostData;
     uboCam->view = view;
     uboCam->proj = proj;
+    printf("Proj:\n");
+    coal_PrintMat4(&proj);
     uboCam->camera = scene->camera.xform;
 }
 
@@ -1064,6 +1080,8 @@ static void syncScene(const uint32_t frameIndex)
     if (scene->dirt)
     {
         if (scene->dirt & OBDN_S_CAMERA_VIEW_BIT)
+            cameraNeedUpdate = MAX_FRAMES_IN_FLIGHT;
+        if (scene->dirt & OBDN_S_CAMERA_PROJ_BIT)
             cameraNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene->dirt & OBDN_S_LIGHTS_BIT)
             lightsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
@@ -1126,7 +1144,7 @@ static void syncScene(const uint32_t frameIndex)
     }
 }
 
-void r_InitRenderer(const Obdn_S_Scene* scene_)
+void r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout)
 {
     scene = scene_;
 
@@ -1142,7 +1160,7 @@ void r_InitRenderer(const Obdn_S_Scene* scene_)
 
     initAttachments();
     V1_PRINT(">> Tanto: attachments initialized. \n");
-    initRenderPass();
+    initRenderPass(finalImageLayout);
     V1_PRINT(">> Tanto: renderpasses initialized. \n");
     initFramebuffers();
     V1_PRINT(">> Tanto: framebuffers initialized. \n");
@@ -1158,10 +1176,12 @@ void r_InitRenderer(const Obdn_S_Scene* scene_)
 VkSemaphore r_Render(uint32_t f, VkSemaphore waitSemephore)
 {
     assert(scene->primCount);
+    printf(">>> Tanto: Render: frame %d\n", f);
     obdn_v_WaitForFence(&renderCommands[f].fence);
     syncScene(f);
     obdn_v_SubmitGraphicsCommand(0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, waitSemephore, renderCommands[f].semaphore, renderCommands[f].fence, renderCommands[f].buffer);
     waitSemephore = renderCommands[f].semaphore;
+    printf(">>> Tanto: Submitted render command!\n");
     if (ri.renderUi)
         waitSemephore = ri.renderUi(waitSemephore);
     if (ri.presentFrame)
