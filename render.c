@@ -144,7 +144,6 @@ static const VkFormat formatImageRoughness = VK_FORMAT_R16_UNORM;
 static void initAttachments(void);
 static void initFramebuffers(void);
 static void initDescriptorSetsAndPipelineLayouts(void);
-static void initPipelines(void);
 static void updateDescriptors(void);
 static void updateRenderCommands(const uint32_t frameIndex);
 static void onSwapchainRecreate(void);
@@ -155,7 +154,7 @@ static void syncScene(const uint32_t frameIndex);
 
 static Obdn_R_Import ri;
 
-void        r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout);
+void        r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout, bool openglStyle);
 VkSemaphore r_Render(uint32_t frameIndex, VkSemaphore waitSemephore); 
 void        r_CleanUp(void);
 uint8_t     r_GetMaxFramesInFlight(void) { return MAX_FRAMES_IN_FLIGHT; }
@@ -518,13 +517,28 @@ static void initDescriptorSetsAndPipelineLayouts(void)
     obdn_r_CreatePipelineLayouts(1, pipeLayoutInfos, &pipelineLayout);
 }
 
-static void initPipelines(void)
+static void initPipelines(bool openglStyle)
 {
     const Obdn_R_AttributeSize posAttrSizes[] = {12};
     const Obdn_R_AttributeSize posNormalUvAttrSizes[3] = {12, 12, 8};
     const Obdn_R_AttributeSize tangetPrimAttrSizes[4]  = {12, 12, 8, 12};
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+
+    VkSpecializationMapEntry mapEntry = {
+        .constantID = 0,
+        .offset = 0,
+        .size = 4
+    };
+
+    int sign = openglStyle ? -1 : 1;
+
+    VkSpecializationInfo fragSpecInfo = {
+        .dataSize = 4,
+        .mapEntryCount = 1,
+        .pData = &sign,
+        .pMapEntries = &mapEntry
+    };
 
     const Obdn_R_GraphicsPipelineInfo gPipelineInfos[] = {{
         .renderPass = gbufferRenderPass, 
@@ -557,6 +571,7 @@ static void initPipelines(void)
         .dynamicStateCount = OBDN_ARRAY_SIZE(dynamicStates),
         .pDynamicStates = dynamicStates,
         .vertexDescription = obdn_r_GetVertexDescription(LEN(posAttrSizes), posAttrSizes),
+        .pFragSpecializationInfo = &fragSpecInfo,
         .vertShader = SPVDIR"/pos-vert.spv",
         .fragShader = SPVDIR"/gbufferpos-frag.spv"
     }};
@@ -924,13 +939,6 @@ static void updateRenderCommands(const uint32_t frameIndex)
 
     obdn_v_BeginCommandBuffer(cmdBuf);
 
-    vkCmdBindDescriptorSets(
-        cmdBuf, 
-        VK_PIPELINE_BIND_POINT_GRAPHICS, 
-        pipelineLayout,
-        0, 2, descriptions[frameIndex].descriptorSets,
-        0, NULL);
-
 #if 0
     VkViewport viewport = {
         .width = (float)windowWidth,
@@ -948,6 +956,13 @@ static void updateRenderCommands(const uint32_t frameIndex)
         .x = 0, .y = 0
     };
 #endif
+
+    vkCmdBindDescriptorSets(
+        cmdBuf, 
+        VK_PIPELINE_BIND_POINT_GRAPHICS, 
+        pipelineLayout,
+        0, 2, descriptions[frameIndex].descriptorSets,
+        0, NULL);
 
     printf("Viewport: w %f, h %f\n", viewport.width, viewport.height);
 
@@ -987,8 +1002,8 @@ static void updateRenderCommands(const uint32_t frameIndex)
         0, 2, descriptions[frameIndex].descriptorSets,
         0, NULL);
 
-    //viewport.height = 0,
-    //viewport.y = -(float)windowHeight;
+    //viewport.height = windowHeight;
+    //viewport.y = 0;
 
     //vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 
@@ -1026,13 +1041,16 @@ static void onSwapchainRecreate(void)
 
 static void updateCamera(uint32_t index)
 {
-    const Mat4 proj = scene->camera.proj;
-    const Mat4 view = m_Invert4x4(&scene->camera.xform);
+    Mat4 proj = scene->camera.proj;
+    const Mat4 view = scene->camera.view;
     Camera* uboCam = (Camera*)cameraBuffers[index].hostData;
+    //proj.x[1][1] *= -1;
     uboCam->view = view;
     uboCam->proj = proj;
     printf("Proj:\n");
     coal_PrintMat4(&proj);
+    printf("View:\n");
+    coal_PrintMat4(&view);
     uboCam->camera = scene->camera.xform;
 }
 
@@ -1144,7 +1162,7 @@ static void syncScene(const uint32_t frameIndex)
     }
 }
 
-void r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout)
+void r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout, bool openglStyle)
 {
     scene = scene_;
 
@@ -1168,7 +1186,7 @@ void r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout)
     V1_PRINT(">> Tanto: descriptor sets and pipeline layouts initialized. \n");
     updateDescriptors();
     V1_PRINT(">> Tanto: descriptors updated. \n");
-    initPipelines();
+    initPipelines(openglStyle);
     V1_PRINT(">> Tanto: pipelines initialized. \n");
     V1_PRINT(">> Tanto: initialization complete. \n");
 }

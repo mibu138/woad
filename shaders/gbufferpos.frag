@@ -18,6 +18,8 @@ layout(set = 0, binding = 4) uniform Materials {
     Material mat[14];
 } materials;
 
+layout (constant_id = 0) const int SIGN = -1;
+
 void main()
 {
     const Material mat = materials.mat[matId];
@@ -25,7 +27,7 @@ void main()
     outRoughness = mat.roughness;
     outWorld  = vec4(worldPos, 1);
     vec3 tanget = dFdx(worldPos);
-    vec3 bitang = dFdy(worldPos);
+    vec3 bitang = SIGN * dFdy(worldPos);
     vec3 N = normalize(cross(bitang, tanget));
     outNormal = vec4(N, 1); //wrong but for now...
 }
