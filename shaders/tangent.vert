@@ -15,7 +15,7 @@ layout(location = 3) out mat3 outTBN;
 
 void main()
 {
-    const mat4 xform = model.xform[push.primId];
+    const mat4 xform = push.xform;
     const vec4 worldPos = xform * vec4(pos, 1.0);
     gl_Position = camera.proj * camera.view * worldPos;
     vec3 bitangent = normalize(cross(norm, tangent));

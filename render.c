@@ -73,8 +73,12 @@ typedef struct {
     Light light[OBDN_S_MAX_LIGHTS];
 } Lights;
 
+// we may be able to use this space to update certain prim transforms
+// faster than running through the whole list of them
+// especially when dealing with many hundreds of prims.
+// currently though this is not used.
 typedef struct {
-    Mat4 xform[MAX_PRIM_COUNT];
+    Mat4 xform[16]; 
 } Xforms;
 
 typedef struct {
@@ -494,13 +498,13 @@ static void initDescriptorSetsAndPipelineLayouts(void)
 
     const VkPushConstantRange pcPrimId = {
         .offset = 0,
-        .size = sizeof(uint32_t) * 2, //prim id, material id
+        .size = sizeof(Mat4) + sizeof(uint32_t) * 2, //prim id, material id
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
     };
 
     // light count
     const VkPushConstantRange pcFrag = {
-        .offset = sizeof(uint32_t) * 2,
+        .offset = sizeof(Mat4) + sizeof(uint32_t) * 2, //prim id, material id
         .size = sizeof(uint32_t),
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
     };
@@ -829,9 +833,6 @@ static void generateGBuffer(VkCommandBuffer cmdBuf, const uint32_t frameIndex)
 
     vkCmdBeginRenderPass(cmdBuf, &rpassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdPushConstants(cmdBuf, pipelineLayout, 
-            VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR, sizeof(uint32_t) * 2, sizeof(uint32_t), &scene->lightCount);
-
     //assert(sizeof(Vec4) == sizeof(Obdn_S_Material));
     assert(scene->primCount < MAX_PRIM_COUNT);
 
@@ -844,10 +845,13 @@ static void generateGBuffer(VkCommandBuffer cmdBuf, const uint32_t frameIndex)
         {
             Obdn_S_PrimId primId = pipelinePrimLists[pipeId].primIds[i];
             Obdn_S_MaterialId matId = scene->prims[primId].materialId;
+            Mat4 xform = scene->xforms[primId];
             vkCmdPushConstants(cmdBuf, pipelineLayout, 
-                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(uint32_t), &primId);
+                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), &xform);
             vkCmdPushConstants(cmdBuf, pipelineLayout, 
-                    VK_SHADER_STAGE_VERTEX_BIT, sizeof(uint32_t), sizeof(uint32_t), &matId);
+                    VK_SHADER_STAGE_VERTEX_BIT, sizeof(Mat4), sizeof(uint32_t), &primId);
+            vkCmdPushConstants(cmdBuf, pipelineLayout, 
+                    VK_SHADER_STAGE_VERTEX_BIT, sizeof(Mat4) + sizeof(uint32_t), sizeof(uint32_t), &matId);
             obdn_r_DrawPrim(cmdBuf, &scene->prims[primId].rprim);
         }
     }
@@ -974,6 +978,9 @@ static void updateRenderCommands(const uint32_t frameIndex)
     vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
     vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
+    vkCmdPushConstants(cmdBuf, pipelineLayout, 
+            VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR, sizeof(Mat4) + sizeof(uint32_t) * 2, sizeof(uint32_t), &scene->lightCount);
+
     generateGBuffer(cmdBuf, frameIndex);
 
     obdn_v_MemoryBarrier(
@@ -1044,18 +1051,18 @@ static void updateCamera(uint32_t index)
     Mat4 proj = scene->camera.proj;
     const Mat4 view = scene->camera.view;
     Camera* uboCam = (Camera*)cameraBuffers[index].hostData;
-    //proj.x[1][1] *= -1;
     uboCam->view = view;
     uboCam->proj = proj;
-    printf("Proj:\n");
-    coal_PrintMat4(&proj);
-    printf("View:\n");
-    coal_PrintMat4(&view);
+    //printf("Proj:\n");
+    //coal_PrintMat4(&proj);
+    //printf("View:\n");
+    //coal_PrintMat4(&view);
     uboCam->camera = scene->camera.xform;
 }
 
-static void updateXform(uint32_t frameIndex, uint32_t primIndex)
+static void updateFastXforms(uint32_t frameIndex, uint32_t primIndex)
 {
+    assert(primIndex < 16);
     Xforms* xforms = (Xforms*)xformsBuffers[frameIndex].hostData;
     xforms->xform[primIndex] = scene->xforms[primIndex];
 }
@@ -1089,7 +1096,7 @@ static void buildAccelerationStructures(void)
 static void syncScene(const uint32_t frameIndex)
 {
     static uint8_t cameraNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
-    static uint8_t xformsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
+    //static uint8_t xformsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t lightsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t texturesNeedUpdate  = MAX_FRAMES_IN_FLIGHT;
     static uint8_t materialsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
@@ -1104,7 +1111,7 @@ static void syncScene(const uint32_t frameIndex)
         if (scene->dirt & OBDN_S_LIGHTS_BIT)
             lightsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene->dirt & OBDN_S_XFORMS_BIT)
-            xformsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
+            framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene->dirt & OBDN_S_MATERIALS_BIT)
             materialsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene->dirt & OBDN_S_TEXTURES_BIT)
@@ -1128,12 +1135,6 @@ static void syncScene(const uint32_t frameIndex)
     {
         updateCamera(frameIndex);
         cameraNeedUpdate--;
-    }
-    if (xformsNeedUpdate)
-    {
-        for (int i = 0; i < scene->primCount; i++) 
-            updateXform(frameIndex, i);
-        xformsNeedUpdate--;
     }
     if (lightsNeedUpdate)
     {
@@ -1194,12 +1195,10 @@ void r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout, 
 VkSemaphore r_Render(uint32_t f, VkSemaphore waitSemephore)
 {
     assert(scene->primCount);
-    printf(">>> Tanto: Render: frame %d\n", f);
     obdn_v_WaitForFence(&renderCommands[f].fence);
     syncScene(f);
     obdn_v_SubmitGraphicsCommand(0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, waitSemephore, renderCommands[f].semaphore, renderCommands[f].fence, renderCommands[f].buffer);
     waitSemephore = renderCommands[f].semaphore;
-    printf(">>> Tanto: Submitted render command!\n");
     if (ri.renderUi)
         waitSemephore = ri.renderUi(waitSemephore);
     if (ri.presentFrame)

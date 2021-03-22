@@ -14,10 +14,10 @@ layout(location = 3) out uint outMatId;
 
 void main()
 {
-    vec4 worldPos = model.xform[push.primId] * vec4(pos, 1.0);
+    vec4 worldPos = push.xform * vec4(pos, 1.0);
     gl_Position = camera.proj * camera.view * worldPos;
     outWorldPos = worldPos.xyz; 
-    outNormal = normalize((model.xform[push.primId] * vec4(norm, 0.0)).xyz); // this is fine as long as we only allow uniform scales
+    outNormal = normalize((push.xform * vec4(norm, 0.0)).xyz); // this is fine as long as we only allow uniform scales
     outUv = uvw.st;
     outMatId = push.matId;
 }

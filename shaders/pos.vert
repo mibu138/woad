@@ -11,7 +11,7 @@ layout(location = 1) out uint outMatId;
 void main()
 {
     vec3 p = pos;
-    vec4 worldPos = model.xform[push.primId] * vec4(p, 1.0);
+    vec4 worldPos = push.xform * vec4(p, 1.0);
     gl_Position = camera.proj * camera.view * worldPos;
     outWorldPos = worldPos.xyz; 
     outMatId = push.matId;

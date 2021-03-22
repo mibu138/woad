@@ -8,6 +8,6 @@ layout(set = 0, binding = 0) uniform Camera {
 } camera;
 
 layout(push_constant) uniform PushConstant {
-    layout(offset = 8) uint     lightCount;
+    layout(offset = 72) uint     lightCount;
 } push;
 

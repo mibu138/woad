@@ -13,7 +13,7 @@ layout(set = 1, binding = 5) uniform accelerationStructureEXT topLevelAS;
 layout(location = 0) rayPayloadEXT hitPayload payload;
 
 layout(push_constant) uniform PushConstant {
-    layout(offset = 8) uint     lightCount;
+    layout(offset = 72) uint     lightCount;
 } push;
 
 void main()
