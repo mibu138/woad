@@ -14,7 +14,6 @@
 #include <obsidian/v_swapchain.h>
 #include <obsidian/t_def.h>
 #include <obsidian/u_ui.h>
-#include <obsidian/t_utils.h>
 #include <obsidian/r_pipeline.h>
 #include <obsidian/r_raytrace.h>
 #include <obsidian/r_renderpass.h>
@@ -153,7 +152,6 @@ static void updateRenderCommands(const uint32_t frameIndex);
 static void onSwapchainRecreate(void);
 static void updateLight(uint32_t frameIndex, uint32_t lightIndex);
 static void updateCamera(uint32_t index);
-static void updateXform(uint32_t frameIndex, uint32_t primIndex);
 static void syncScene(const uint32_t frameIndex);
 
 static Obdn_R_Import ri;
