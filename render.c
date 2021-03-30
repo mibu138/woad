@@ -1035,9 +1035,12 @@ static void cleanUpSwapchainDependent(void)
 
 static void onSwapchainRecreate(void)
 {
+    printf("TANTO: SWAPCHAIN RECREATE CALLED!\n");
     vkDeviceWaitIdle(device);
+    printf("TANTO: old window: %d %d!\n", windowWidth, windowHeight);
     windowWidth  = scene->window[0];
     windowHeight = scene->window[1];
+    printf("TANTO: new window: %d %d!\n", windowWidth, windowHeight);
     cleanUpSwapchainDependent();
     initAttachments();
     initFramebuffers();
