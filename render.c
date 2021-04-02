@@ -1,3 +1,4 @@
+#include "coal/m.h"
 #include "coal/m_math.h"
 #include "coal/util.h"
 #include "obsidian/r_geo.h"
@@ -843,9 +844,9 @@ static void generateGBuffer(VkCommandBuffer cmdBuf, const uint32_t frameIndex)
         {
             Obdn_S_PrimId primId = pipelinePrimLists[pipeId].primIds[i];
             Obdn_S_MaterialId matId = scene->prims[primId].materialId;
-            Mat4 xform = scene->xforms[primId];
+            const float (*xform)[4] = scene->xforms[primId];
             vkCmdPushConstants(cmdBuf, pipelineLayout, 
-                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), &xform);
+                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), xform);
             vkCmdPushConstants(cmdBuf, pipelineLayout, 
                     VK_SHADER_STAGE_VERTEX_BIT, sizeof(Mat4), sizeof(uint32_t), &primId);
             vkCmdPushConstants(cmdBuf, pipelineLayout, 
@@ -1065,7 +1066,7 @@ static void updateFastXforms(uint32_t frameIndex, uint32_t primIndex)
 {
     assert(primIndex < 16);
     Xforms* xforms = (Xforms*)xformsBuffers[frameIndex].hostData;
-    xforms->xform[primIndex] = scene->xforms[primIndex];
+    coal_Copy_Mat4(scene->xforms[primIndex], xforms->xform[primIndex].x);
 }
 
 static void updateLight(uint32_t frameIndex, uint32_t lightIndex)
@@ -1121,6 +1122,7 @@ static void syncScene(const uint32_t frameIndex)
         }
         if (scene->dirt & OBDN_S_PRIMS_BIT)
         {
+            printf("TANTO: PRIMS DIRTY\n");
             sortPipelinePrims();
             buildAccelerationStructures();
             updateASDescriptors();
