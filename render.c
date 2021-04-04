@@ -587,7 +587,7 @@ static void initPipelines(bool openglStyle)
         .dynamicStateCount = OBDN_ARRAY_SIZE(dynamicStates),
         .pDynamicStates = dynamicStates,
         .vertShader = obdn_r_FullscreenTriVertShader(),
-        .fragShader = SPVDIR"/deferred-frag.spv"
+        .fragShader = SPVDIR"/debug-deferred-frag.spv"
     };
 
     const Obdn_R_RayTracePipelineInfo rtPipelineInfo = {
