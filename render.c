@@ -844,7 +844,7 @@ static void generateGBuffer(VkCommandBuffer cmdBuf, const uint32_t frameIndex)
         {
             Obdn_S_PrimId primId = pipelinePrimLists[pipeId].primIds[i];
             Obdn_S_MaterialId matId = scene->prims[primId].materialId;
-            const float (*xform)[4] = scene->xforms[primId];
+            const float (*xform)[4] = scene->prims[primId].xform;
             vkCmdPushConstants(cmdBuf, pipelineLayout, 
                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), xform);
             vkCmdPushConstants(cmdBuf, pipelineLayout, 
@@ -899,7 +899,6 @@ static void sortPipelinePrims(void)
     for (Obdn_S_PrimId primId = 0; primId < scene->primCount; primId++) 
     {
         AttrMask attrMask = 0;
-        if (scene->prims[primId].inactive) continue;
         const Obdn_R_Primitive* prim = &scene->prims[primId].rprim;
         for (int i = 0; i < prim->attrCount; i++)
         {
@@ -1067,7 +1066,7 @@ static void updateFastXforms(uint32_t frameIndex, uint32_t primIndex)
 {
     assert(primIndex < 16);
     Xforms* xforms = (Xforms*)xformsBuffers[frameIndex].hostData;
-    coal_Copy_Mat4(scene->xforms[primIndex], xforms->xform[primIndex].x);
+    //coal_Copy_Mat4(scene->xforms[primIndex], xforms->xform[primIndex].x);
 }
 
 static void updateLight(uint32_t frameIndex, uint32_t lightIndex)
@@ -1088,12 +1087,11 @@ static void buildAccelerationStructures(void)
     static_assert(sizeof(xforms) < 1000000, "possible stack overflow");
     for (int i = 0; i < scene->primCount; i++)
     {
-        if (scene->prims[i].inactive) continue;
         AccelerationStructure* blas = &blasses[blasCount];
         if (blas->bufferRegion.size != 0)
             obdn_r_DestroyAccelerationStruct(blas);
         obdn_r_BuildBlas(&scene->prims[i].rprim, blas);
-        coal_Copy_Mat4(scene->xforms[i], xforms[blasCount++]);
+        coal_Copy_Mat4(scene->prims[i].xform, xforms[blasCount++]);
     }
     if (tlas.bufferRegion.size != 0)
         obdn_r_DestroyAccelerationStruct(&tlas);
