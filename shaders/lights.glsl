@@ -1,5 +1,5 @@
 #define MAX_LIGHTS 8
-#define SPEC_EXP 32
+#define SPEC_EXP 128
 
 #define POINT_LIGHT 0
 #define DIR_LIGHT   1

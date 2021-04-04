@@ -35,8 +35,9 @@ void main()
             vec3 eyeDir = normalize(campos - P);
             if (lights.light[i].type == DIR_LIGHT)
             {
-                diffuse += lights.light[i].color * calcDiffuse(N, lights.light[i].vector) * lights.light[i].intensity;
-                specular += lights.light[i].color * calcSpecular(N, lights.light[i].vector, eyeDir, SPEC_EXP) * lights.light[i].intensity;
+                vec3 dir      = normalize(lights.light[i].vector);
+                diffuse += lights.light[i].color * calcDiffuse(N, dir) * lights.light[i].intensity;
+                specular += lights.light[i].color * calcSpecular(N, dir, eyeDir, SPEC_EXP) * lights.light[i].intensity;
             }
             else
             {
