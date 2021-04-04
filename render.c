@@ -899,6 +899,7 @@ static void sortPipelinePrims(void)
     for (Obdn_S_PrimId primId = 0; primId < scene->primCount; primId++) 
     {
         AttrMask attrMask = 0;
+        if (scene->prims[primId].inactive) continue;
         const Obdn_R_Primitive* prim = &scene->prims[primId].rprim;
         for (int i = 0; i < prim->attrCount; i++)
         {
@@ -1082,16 +1083,21 @@ static void updateMaterials(uint32_t frameIndex)
 
 static void buildAccelerationStructures(void)
 {
+    int blasCount = 0;
+    Coal_Mat4 xforms[OBDN_S_MAX_PRIMS];
+    static_assert(sizeof(xforms) < 1000000, "possible stack overflow");
     for (int i = 0; i < scene->primCount; i++)
     {
-        AccelerationStructure* blas = &blasses[i];
+        if (scene->prims[i].inactive) continue;
+        AccelerationStructure* blas = &blasses[blasCount];
         if (blas->bufferRegion.size != 0)
             obdn_r_DestroyAccelerationStruct(blas);
         obdn_r_BuildBlas(&scene->prims[i].rprim, blas);
+        coal_Copy_Mat4(scene->xforms[i], xforms[blasCount++]);
     }
     if (tlas.bufferRegion.size != 0)
         obdn_r_DestroyAccelerationStruct(&tlas);
-    obdn_r_BuildTlasNew(scene->primCount, blasses, scene->xforms, &tlas);
+    obdn_r_BuildTlasNew(blasCount, blasses, xforms, &tlas);
     printf(">>>>> Built acceleration structures\n");
 }
 
@@ -1144,6 +1150,8 @@ static void syncScene(const uint32_t frameIndex)
         for (int i = 0; i < scene->lightCount; i++) 
             updateLight(frameIndex, i);
         lightsNeedUpdate--;
+        printf("Tanto: lights sync\n");
+        obdn_s_PrintLightInfo(scene);
     }
     if (materialsNeedUpdate)
     {
