@@ -33,7 +33,7 @@ void main()
         if ((shadowMask & (0x01 << i)) > 0)
         {
             vec3 eyeDir = normalize(campos - P);
-            if (lights.light[i].type == 1)
+            if (lights.light[i].type == DIR_LIGHT)
             {
                 diffuse += lights.light[i].color * calcDiffuse(N, lights.light[i].vector) * lights.light[i].intensity;
                 specular += lights.light[i].color * calcSpecular(N, lights.light[i].vector, eyeDir, SPEC_EXP) * lights.light[i].intensity;

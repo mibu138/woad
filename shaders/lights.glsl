@@ -1,4 +1,4 @@
-#define MAX_LIGHTS 16
+#define MAX_LIGHTS 8
 #define SPEC_EXP 128
 
 #define POINT_LIGHT 0

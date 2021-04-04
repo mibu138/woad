@@ -1117,7 +1117,10 @@ static void syncScene(const uint32_t frameIndex)
         if (scene->dirt & OBDN_S_CAMERA_PROJ_BIT)
             cameraNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene->dirt & OBDN_S_LIGHTS_BIT)
+        {
             lightsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
+            framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
+        }
         if (scene->dirt & OBDN_S_XFORMS_BIT)
             framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene->dirt & OBDN_S_MATERIALS_BIT)
