@@ -1082,20 +1082,27 @@ static void updateMaterials(uint32_t frameIndex)
 
 static void buildAccelerationStructures(void)
 {
-    int blasCount = 0;
     Coal_Mat4 xforms[OBDN_S_MAX_PRIMS];
     static_assert(sizeof(xforms) < 1000000, "possible stack overflow");
-    for (int i = 0; i < scene->primCount; i++)
+    static int prevPrimCount = 0;
+    for (int i = 0; i < prevPrimCount; i++)
     {
-        AccelerationStructure* blas = &blasses[blasCount];
-        if (blas->bufferRegion.size != 0)
-            obdn_r_DestroyAccelerationStruct(blas);
-        obdn_r_BuildBlas(&scene->prims[i].rprim, blas);
-        coal_Copy_Mat4(scene->prims[i].xform, xforms[blasCount++]);
+        AccelerationStructure* blas = &blasses[i];
+        obdn_r_DestroyAccelerationStruct(blas);
     }
     if (tlas.bufferRegion.size != 0)
         obdn_r_DestroyAccelerationStruct(&tlas);
-    obdn_r_BuildTlasNew(blasCount, blasses, xforms, &tlas);
+    if (scene->primCount > 0)
+    {
+        for (int i = 0; i < scene->primCount; i++)
+        {
+            AccelerationStructure* blas = &blasses[i];
+            obdn_r_BuildBlas(&scene->prims[i].rprim, blas);
+            coal_Copy_Mat4(scene->prims[i].xform, xforms[i]);
+        }
+        obdn_r_BuildTlasNew(scene->primCount, blasses, xforms, &tlas);
+    }
+    prevPrimCount = scene->primCount;
     printf(">>>>> Built acceleration structures\n");
 }
 
@@ -1206,7 +1213,7 @@ void r_InitRenderer(const Obdn_S_Scene* scene_, VkImageLayout finalImageLayout, 
 
 VkSemaphore r_Render(uint32_t f, VkSemaphore waitSemephore)
 {
-    assert(scene->primCount);
+    //assert(scene->primCount);
     obdn_v_WaitForFence(&renderCommands[f].fence);
     syncScene(f);
     obdn_v_SubmitGraphicsCommand(0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, waitSemephore, renderCommands[f].semaphore, renderCommands[f].fence, renderCommands[f].buffer);
