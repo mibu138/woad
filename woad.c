@@ -1,39 +1,21 @@
-#include "coal/m.h"
-#include "coal/m_math.h"
-#include "coal/util.h"
-#include "obsidian/r_geo.h"
-#include "obsidian/s_scene.h"
-#include "obsidian/v_image.h"
-#include "obsidian/v_memory.h"
-#include "obsidian/v_vulkan.h"
+#define COAL_SIMPLE_TYPE_NAMES
+#include <coal/coal.h>
+#include <hell/hell.h>
+#include <obsidian/obsidian.h>
 #include <memory.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <obsidian/r_render.h>
-#include <obsidian/v_video.h>
-#include <obsidian/v_swapchain.h>
-#include <obsidian/t_def.h>
-#include <obsidian/u_ui.h>
-#include <obsidian/r_pipeline.h>
-#include <obsidian/r_raytrace.h>
-#include <obsidian/r_renderpass.h>
-#include <obsidian/v_command.h>
-#include <obsidian/r_api.h>
-#include <vulkan/vulkan_core.h>
-#include <obsidian/v_private.h>
-#include <obsidian/r_attribute.h>
-#include <obsidian/private.h>
 
 #define SPVDIR "/home/michaelb/dev/tanto/shaders/spv"
 
-typedef Obdn_V_Command               Command;
-typedef Obdn_V_Image                 Image;
-typedef Obdn_S_Light                 Light;
-typedef Obdn_S_Material              Material;
-typedef Obdn_V_BufferRegion          BufferRegion;
-typedef Obdn_R_AccelerationStructure AccelerationStructure;
-typedef Obdn_R_Primitive             Prim;
+typedef Obdn_Command               Command;
+typedef Obdn_Image                 Image;
+typedef Obdn_Light                 Light;
+typedef Obdn_Material              Material;
+typedef Obdn_BufferRegion          BufferRegion;
+typedef Obdn_AccelerationStructure AccelerationStructure;
+typedef Obdn_Primitive             Prim;
 
 typedef Obdn_Mask AttrMask;
 
@@ -70,7 +52,8 @@ _Static_assert(GBUFFER_PIPELINE_COUNT < OBDN_MAX_PIPELINES, "GRAPHICS_PIPELINE_C
 #define MAX_PRIM_COUNT OBDN_S_MAX_PRIMS
 
 typedef struct {
-    Light light[OBDN_S_MAX_LIGHTS];
+    Light* light;
+    int    count;
 } Lights;
 
 // we may be able to use this space to update certain prim transforms
@@ -101,21 +84,21 @@ static VkPipeline                gbufferPipelines[GBUFFER_PIPELINE_COUNT];
 static VkPipeline                defferedPipeline;
 
 static VkPipeline                raytracePipeline;
-static Obdn_R_ShaderBindingTable shaderBindingTable;
+static Obdn_ShaderBindingTable shaderBindingTable;
 
 static BufferRegion cameraBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion xformsBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion lightsBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion materialsBuffers[MAX_FRAMES_IN_FLIGHT];
 
-static const Obdn_S_Scene* scene;
+static const Obdn_Scene* scene;
 
-static Obdn_S_PrimitiveList pipelinePrimLists[GBUFFER_PIPELINE_COUNT];
+static Obdn_PrimitiveList pipelinePrimLists[GBUFFER_PIPELINE_COUNT];
 
 // raytrace stuff
 
-static AccelerationStructure blasses[OBDN_S_MAX_PRIMS];
-static AccelerationStructure tlas;
+static AccelerationStructure* blasses;
+static AccelerationStructure  tlas;
 
 // raytrace stuff
 

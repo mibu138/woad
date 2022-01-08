@@ -4,3 +4,6 @@ tags
 tanto.so
 render.o
 shaders/spv/
+*.swp
+deps
+build/
