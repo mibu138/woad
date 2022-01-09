@@ -1,0 +1,16 @@
+include(author_shaders)
+author_shaders(shaders 
+    woad
+    Obsidian::glslc
+    SOURCES 
+    debug-deferred.frag
+    deferred.frag
+    gbuffer.frag
+    gbufferpos.frag
+    gbuffertan.frag
+    pos.vert
+    regular.vert
+    shadow.rchit
+    shadow.rgen
+    shadow.rmiss
+    tangent.vert)
