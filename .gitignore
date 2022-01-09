@@ -7,3 +7,4 @@ shaders/spv/
 *.swp
 deps
 build/
+.cache
