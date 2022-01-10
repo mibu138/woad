@@ -74,12 +74,10 @@ typedef struct {
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
-static VkRenderPass renderpass;
 static VkRenderPass gbufferRenderPass;
 static VkRenderPass deferredRenderPass;
 static uint32_t     graphic_queue_family_index;
 
-static VkFramebuffer framebuffers[MAX_FRAMES_IN_FLIGHT];
 static VkFramebuffer gbuffers[MAX_FRAMES_IN_FLIGHT];
 static VkFramebuffer swapImageBuffer[MAX_FRAMES_IN_FLIGHT];
 
@@ -94,8 +92,6 @@ static BufferRegion xformsBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion lightsBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion materialsBuffers[MAX_FRAMES_IN_FLIGHT];
 
-static const Obdn_Scene* scene;
-
 static Obdn_Memory* memory;
 static VkDevice     device;
 
@@ -103,10 +99,7 @@ static Obdn_PrimitiveList pipelinePrimLists[GBUFFER_PIPELINE_COUNT];
 
 // raytrace stuff
 
-static struct {
-    Hell_Array             array;
-    AccelerationStructure* elems;
-} blasses;
+static Hell_Array blas_array;
 static AccelerationStructure tlas;
 
 // raytrace stuff
@@ -123,9 +116,6 @@ static Image imageShadow;
 static Image imageAlbedo;
 static Image imageRoughness;
 
-static Obdn_CommandPool cmdpool;
-static VkCommandBuffer  cmdbuffers[MAX_FRAMES_IN_FLIGHT];
-
 static const VkFormat formatImageP = VK_FORMAT_R32G32B32A32_SFLOAT;
 static const VkFormat formatImageN = VK_FORMAT_R32G32B32A32_SFLOAT;
 static const VkFormat formatImageShadow =
@@ -136,8 +126,6 @@ static const VkFormat formatImageRoughness = VK_FORMAT_R16_UNORM;
 // declarations for overview and navigation
 static void initDescriptorSetsAndPipelineLayouts(void);
 static void updateDescriptors(void);
-static void updateLight(uint32_t frameIndex, uint32_t lightIndex);
-static void updateCamera(uint32_t index);
 static void syncScene(const uint32_t frameIndex);
 
 void r_InitRenderer(const Obdn_Scene* scene_, VkImageLayout finalImageLayout,
@@ -196,14 +184,6 @@ static void
 initRenderPass(VkDevice device, VkFormat colorFormat, VkFormat depthFormat,
                VkImageLayout finalColorLayout, VkImageLayout finalDepthLayout)
 {
-    obdn_CreateRenderPass_ColorDepth(
-        device, VK_IMAGE_LAYOUT_UNDEFINED, finalColorLayout,
-        VK_IMAGE_LAYOUT_UNDEFINED, finalDepthLayout,
-        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        colorFormat, depthFormat, &renderpass);
-    printf("Created renderpass 1...\n");
-
     // gbuffer renderpass
     {
         VkAttachmentDescription attachmentWorldP = {
@@ -355,24 +335,6 @@ initFramebuffers(const Obdn_Frame* frame)
     uint32_t windowHeight = frame->height;
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        {
-            const VkImageView   attachments[] = {frame->aovs[0].view,
-                                               frame->aovs[1].view};
-
-            const VkFramebufferCreateInfo fbi = {
-                .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .pNext           = NULL,
-                .flags           = 0,
-                .renderPass      = renderpass,
-                .attachmentCount = 2,
-                .pAttachments    = attachments,
-                .width           = windowWidth,
-                .height          = windowHeight,
-                .layers          = 1,
-            };
-
-            V_ASSERT(vkCreateFramebuffer(device, &fbi, NULL, &framebuffers[i]));
-        }
         {
             const VkImageView attachments[] = {
                 imageWorldP.view, imageNormal.view, imageAlbedo.view,
@@ -776,7 +738,7 @@ static void
 updateTexture(const uint32_t frameIndex, const Obdn_Image* img,
               const uint32_t texId)
 {
-    VkDescriptorImageInfo textureInfo = {.imageLayout = img->layout,
+    VkDescriptorImageInfo textureInfo = {.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                          .imageView   = img->view,
                                          .sampler     = img->sampler};
 
@@ -796,7 +758,7 @@ updateTexture(const uint32_t frameIndex, const Obdn_Image* img,
 }
 
 static void
-generateGBuffer(VkCommandBuffer cmdBuf, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
+generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
 {
     VkClearValue clearValueColor = {1.0f, 0.0f, 0.0f, 0.0f};
     VkClearValue clearValueMatid = {0};
@@ -881,7 +843,7 @@ deferredRender(VkCommandBuffer cmdBuf, const uint32_t frameIndex, uint32_t windo
 }
 
 static void
-sortPipelinePrims(void)
+sortPipelinePrims(const Obdn_Scene* scene)
 {
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)
     {
@@ -938,7 +900,7 @@ sortPipelinePrims(void)
 }
 
 static void
-updateRenderCommands(VkCommandBuffer cmdBuf, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
+updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
 {
 
 #if 0
@@ -976,7 +938,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const uint32_t frameIndex, uint32_t
         VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR,
         sizeof(Mat4) + sizeof(uint32_t) * 2, sizeof(uint32_t), &light_count);
 
-    generateGBuffer(cmdBuf, frameIndex, windowWidth, windowHeight);
+    generateGBuffer(cmdBuf, scene, frameIndex, windowWidth, windowHeight);
 
     obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                          VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0,
@@ -1010,7 +972,6 @@ cleanUpSwapchainDependent(void)
 {
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vkDestroyFramebuffer(device, framebuffers[i], NULL);
         vkDestroyFramebuffer(device, gbuffers[i], NULL);
         vkDestroyFramebuffer(device, swapImageBuffer[i], NULL);
     }
@@ -1033,7 +994,7 @@ onSwapchainRecreate(const Obdn_Frame* fb)
 }
 
 static void
-updateCamera(uint32_t index)
+updateCamera(const Obdn_Scene* scene, uint32_t index)
 {
     Camera* uboCam = (Camera*)cameraBuffers[index].hostData;
     uboCam->view   = obdn_SceneGetCameraView(scene);
@@ -1054,7 +1015,7 @@ updateFastXforms(uint32_t frameIndex, uint32_t primIndex)
 }
 
 static void
-updateLight(uint32_t frameIndex, uint32_t lightIndex)
+updateLight(const Obdn_Scene* scene, uint32_t frameIndex, uint32_t lightIndex)
 {
     Lights*           lights = (Lights*)lightsBuffers[frameIndex].hostData;
     const Obdn_Light* l =
@@ -1063,7 +1024,7 @@ updateLight(uint32_t frameIndex, uint32_t lightIndex)
 }
 
 static void
-updateMaterials(uint32_t frameIndex)
+updateMaterials(const Obdn_Scene* scene, uint32_t frameIndex)
 {
     obint                matcount  = 0;
     const Obdn_Material* materials = obdn_SceneGetMaterials(scene, &matcount);
@@ -1072,31 +1033,33 @@ updateMaterials(uint32_t frameIndex)
 }
 
 static void
-buildAccelerationStructures(void)
+buildAccelerationStructures(const Obdn_Scene* scene)
 {
     Hell_Array xforms;
     hell_CreateArray(8, sizeof(Coal_Mat4), NULL, NULL, &xforms);
     obint                 prim_count = 0;
     const Obdn_Primitive* prims = obdn_SceneGetPrimitives(scene, &prim_count);
-    for (int i = 0; i < blasses.array.count; i++)
+    AccelerationStructure* blasses = blas_array.elems;
+    for (int i = 0; i < blas_array.count; i++)
     {
-        AccelerationStructure* blas = &blasses.elems[i];
+        AccelerationStructure* blas = &blasses[i];
         obdn_DestroyAccelerationStruct(device, blas);
     }
     if (tlas.bufferRegion.size != 0)
         obdn_DestroyAccelerationStruct(device, &tlas);
-    hell_ArrayClear(&blasses.array);
+    hell_ArrayClear(&blas_array);
     if (prim_count > 0)
     {
         for (int i = 0; i < prim_count; i++)
         {
             AccelerationStructure blas = {};
             obdn_BuildBlas(memory, prims[i].geo, &blas);
-            hell_ArrayPush(&blasses.array, &blas);
+            hell_ArrayPush(&blas_array, &blas);
             hell_ArrayPush(&xforms, &prims[i].xform);
         }
-        obdn_BuildTlas(memory, prim_count, blasses.elems, xforms.elems, &tlas);
+        obdn_BuildTlas(memory, prim_count, blas_array.elems, xforms.elems, &tlas);
     }
+    hell_DestroyArray(&xforms, NULL);
     printf(">>>>> Built acceleration structures\n");
 }
 
@@ -1133,35 +1096,35 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
         }
         if (scene_dirt & OBDN_SCENE_PRIMS_BIT)
         {
-            printf("TANTO: PRIMS DIRTY\n");
-            sortPipelinePrims();
-            buildAccelerationStructures();
+            printf("WOAD: PRIMS DIRTY\n");
+            sortPipelinePrims(scene);
+            buildAccelerationStructures(scene);
             updateASDescriptors();
             framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         }
-        if (fb->dirty)
-        {
-            onSwapchainRecreate(fb);
-            framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
-        }
+    }
+    if (fb->dirty)
+    {
+        onSwapchainRecreate(fb);
+        framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
     }
     if (cameraNeedUpdate)
     {
-        updateCamera(frameIndex);
+        updateCamera(scene, frameIndex);
         cameraNeedUpdate--;
     }
     if (lightsNeedUpdate)
     {
         obint light_count = obdn_SceneGetLightCount(scene);
         for (int i = 0; i < light_count; i++)
-            updateLight(frameIndex, i);
+            updateLight(scene, frameIndex, i);
         lightsNeedUpdate--;
         printf("Tanto: lights sync\n");
         obdn_PrintLightInfo(scene);
     }
     if (materialsNeedUpdate)
     {
-        updateMaterials(frameIndex);
+        updateMaterials(scene, frameIndex);
         materialsNeedUpdate--;
     }
     if (texturesNeedUpdate) // TODO update all tex
@@ -1170,7 +1133,7 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
         obint               tex_count = 0;
         const Obdn_Texture* tex = obdn_SceneGetTextures(scene, &tex_count);
         // remember, 1 is the first valid texture index
-        for (int i = 1; i <= tex_count; i++)
+        for (int i = 0; i < tex_count; i++)
         {
             updateTexture(frameIndex, tex[i].devImage, i);
         }
@@ -1178,7 +1141,7 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
     }
     if (framesNeedUpdate)
     {
-        updateRenderCommands(cmdbuf, frameIndex, fb->width, fb->height);
+        updateRenderCommands(cmdbuf, scene, frameIndex, fb->width, fb->height);
         framesNeedUpdate--;
     }
 }
@@ -1194,6 +1157,8 @@ woad_Init(Obdn_Instance* instance, Obdn_Memory* memory_,
     {
         pipelinePrimLists[i] = obdn_CreatePrimList(8);
     }
+
+    hell_CreateArray(4, sizeof(AccelerationStructure), NULL, NULL, &blas_array);
 
     device = obdn_GetDevice(instance);
     graphic_queue_family_index =
@@ -1230,9 +1195,10 @@ woad_Cleanup(void)
     }
     vkDestroyPipeline(device, defferedPipeline, NULL);
     vkDestroyPipeline(device, raytracePipeline, NULL);
-    for (int i = 0; i < blasses.array.count; i++)
+    AccelerationStructure* blasses = blas_array.elems;
+    for (int i = 0; i < blas_array.count; i++)
     {
-        AccelerationStructure* blas = &blasses.elems[i];
+        AccelerationStructure* blas = &blasses[i];
         if (blas->bufferRegion.size != 0)
             obdn_DestroyAccelerationStruct(device, blas);
     }
@@ -1248,7 +1214,6 @@ woad_Cleanup(void)
         obdn_FreeBufferRegion(&lightsBuffers[i]);
         obdn_FreeBufferRegion(&materialsBuffers[i]);
     }
-    vkDestroyRenderPass(device, renderpass, NULL);
     vkDestroyRenderPass(device, gbufferRenderPass, NULL);
     vkDestroyRenderPass(device, deferredRenderPass, NULL);
     vkDestroyPipelineLayout(device, pipelineLayout, NULL);
