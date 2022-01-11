@@ -1,5 +1,7 @@
+#define COAL_SIMPLE_TYPE_NAMES
 #include <woad/woad.h>
 #include <hell/hell.h>
+#include <coal/coal.h>
 #include <obsidian/obsidian.h>
 
 Hell_Hellmouth hm;
@@ -14,6 +16,29 @@ VkFence     fences[2];
 VkSemaphore img_acq_semas[2];
 VkSemaphore rendered_semas[2];
 
+bool handlePointerInput(const Hell_Event* event, void* data)
+{
+    static bool lmbdown = false, mmbdown = false, rmbdown = false;
+    static int mx = 0, my = 0;
+    static Vec3 target = {0,0,0};
+    switch (event->type)
+    {
+    case HELL_EVENT_TYPE_MOUSEUP:
+        lmbdown = false;
+        break;
+    case HELL_EVENT_TYPE_MOUSEDOWN:
+        lmbdown = true;
+        break;
+    default:
+        break;
+    }
+    obdn_UpdateCamera_ArcBall(scene, &target, 500, 500, 0.16, mx, hell_GetMouseX(event), my, hell_GetMouseY(event), false, lmbdown, false, false);
+    mx = hell_GetMouseX(event);
+    my = hell_GetMouseY(event);
+    hell_Print("%d %d %d\n", mx, my, lmbdown);
+    return true;
+}
+
 void frame(u64 fi, u64 dt)
 {
     u32 f = fi % 2;
@@ -23,6 +48,9 @@ void frame(u64 fi, u64 dt)
 
     obdn_WaitForFence(orb.device, &fences[f]);
     vkResetCommandBuffer(cmdbuf, 0);
+
+    Mat4 cam = obdn_SceneGetCameraXform(scene);
+    coal_PrintMat4(cam);
 
     obdn_BeginCommandBuffer(cmdbuf);
 
@@ -64,10 +92,14 @@ int main(int argc, char *argv[])
     obdn_CreateSwapchain(orb.instance, orb.memory, hm.eventqueue, hm.windows[0], 
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, &depth_aov, swapchain);
     woad_Init(orb.instance, orb.memory, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 
-            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 2, obdn_GetSwapchainFrames(swapchain));
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 2, obdn_GetSwapchainFrames(swapchain), 0);
 
     scene = obdn_AllocScene();
     obdn_CreateScene(hm.grimoire, orb.memory, 1, 1, 0.01, 100, scene);
+
+    obdn_SceneAddPointLight(scene, (Coal_Vec3){0, 2, 0}, (Coal_Vec3){1, 1, 1}, 1.0);
+    obdn_SceneAddPointLight(scene, (Coal_Vec3){1, 2, 0}, (Coal_Vec3){1, 1, 1}, 1.0);
+    obdn_SceneAddPointLight(scene, (Coal_Vec3){2, 2, 0}, (Coal_Vec3){1, 1, 1}, 1.0);
 
     cmdpool = obdn_CreateCommandPool(orb.device, obdn_GetQueueFamilyIndex(orb.instance, OBDN_V_QUEUE_GRAPHICS_TYPE),
             VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, 2);
@@ -76,6 +108,7 @@ int main(int argc, char *argv[])
     obdn_CreateSemaphores(orb.device, 2, img_acq_semas);
     obdn_CreateSemaphores(orb.device, 2, rendered_semas);
 
+    hell_Subscribe(hm.eventqueue, HELL_EVENT_MASK_POINTER_BIT, hell_GetWindowID(hm.windows[0]), handlePointerInput, NULL);
     hell_Loop(&hm);
     hell_CloseHellmouth(&hm);
     return 0;
