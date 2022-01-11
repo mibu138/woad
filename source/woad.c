@@ -52,10 +52,11 @@ _Static_assert(GBUFFER_PIPELINE_COUNT < OBDN_MAX_PIPELINES,
                "GRAPHICS_PIPELINE_COUNT must be less than OBDN_MAX_PIPELINES");
 
 #define MAX_PRIM_COUNT OBDN_S_MAX_PRIMS
+#define MAX_LIGHT_COUNT 16
 
+// TODO: This is what we need to initialize....
 typedef struct {
-    Light* light;
-    int    count;
+    Light elems[MAX_LIGHT_COUNT];
 } Lights;
 
 // we may be able to use this space to update certain prim transforms
@@ -996,6 +997,7 @@ onSwapchainRecreate(const Obdn_Frame* fb)
 static void
 updateCamera(const Obdn_Scene* scene, uint32_t index)
 {
+    hell_Print("Updating camere! index %d\n", index);
     Camera* uboCam = (Camera*)cameraBuffers[index].hostData;
     uboCam->view   = obdn_SceneGetCameraView(scene);
     uboCam->proj   = obdn_SceneGetCameraProjection(scene);
@@ -1017,10 +1019,6 @@ updateFastXforms(uint32_t frameIndex, uint32_t primIndex)
 static void
 updateLight(const Obdn_Scene* scene, uint32_t frameIndex, uint32_t lightIndex)
 {
-    Lights*           lights = (Lights*)lightsBuffers[frameIndex].hostData;
-    const Obdn_Light* l =
-        Obdn_SceneGetLight(scene, obdn_CreateLightHandle(lightIndex));
-    lights->light[lightIndex] = *l;
 }
 
 static void
@@ -1115,9 +1113,10 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
     }
     if (lightsNeedUpdate)
     {
-        obint light_count = obdn_SceneGetLightCount(scene);
-        for (int i = 0; i < light_count; i++)
-            updateLight(scene, frameIndex, i);
+        obint light_count;
+        Obdn_Light* scene_lights = obdn_SceneGetLights(scene, &light_count);
+        Lights* lights = (Lights*)lightsBuffers[frameIndex].hostData;
+        memcpy(lights, scene_lights, sizeof(Light) * light_count);
         lightsNeedUpdate--;
         printf("Tanto: lights sync\n");
         obdn_PrintLightInfo(scene);
@@ -1150,7 +1149,8 @@ void
 woad_Init(Obdn_Instance* instance, Obdn_Memory* memory_,
                   VkImageLayout finalColorLayout,
                   VkImageLayout finalDepthLayout, uint32_t fbCount,
-                  const Obdn_Frame fbs[/*fbCount*/])
+                  const Obdn_Frame fbs[/*fbCount*/],
+                  Woad_Settings_Flags flags)
 {
     hell_Print("Creating Woad renderer...\n");
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)
