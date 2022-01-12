@@ -10,6 +10,7 @@
 #include <obsidian/attribute.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 
 typedef Obdn_Command               Command;
 typedef Obdn_Image                 Image;
@@ -79,7 +80,7 @@ static VkRenderPass gbufferRenderPass;
 static VkRenderPass deferredRenderPass;
 static uint32_t     graphic_queue_family_index;
 
-static VkFramebuffer gbuffers[MAX_FRAMES_IN_FLIGHT];
+static VkFramebuffer gframebuffer;
 static VkFramebuffer swapImageBuffer[MAX_FRAMES_IN_FLIGHT];
 
 static VkPipeline gbufferPipelines[GBUFFER_PIPELINE_COUNT];
@@ -128,6 +129,8 @@ static const VkFormat formatImageRoughness = VK_FORMAT_R16_UNORM;
 static void initDescriptorSetsAndPipelineLayouts(void);
 static void updateDescriptors(void);
 static void syncScene(const uint32_t frameIndex);
+
+static bool raytracing_disabled = false;
 
 void r_InitRenderer(const Obdn_Scene* scene_, VkImageLayout finalImageLayout,
                     bool openglStyle);
@@ -330,47 +333,45 @@ initRenderPass(VkDevice device, VkFormat colorFormat, VkFormat depthFormat,
 }
 
 static void
-initFramebuffers(const Obdn_Frame* frame)
+initGbufferFramebuffer(u32 w, u32 h)
+{
+    const VkImageView attachments[] = {
+        imageWorldP.view, imageNormal.view, imageAlbedo.view,
+        imageRoughness.view, renderTargetDepth.view};
+
+    const VkFramebufferCreateInfo fbi = {
+        .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext           = NULL,
+        .flags           = 0,
+        .renderPass      = gbufferRenderPass,
+        .attachmentCount = 5,
+        .pAttachments    = attachments,
+        .width           = w,
+        .height          = h,
+        .layers          = 1};
+
+    V_ASSERT(vkCreateFramebuffer(device, &fbi, NULL, &gframebuffer));
+}
+
+static void
+initSwapFramebuffer(const Obdn_Frame* frame)
 {
     uint32_t windowWidth = frame->width;
     uint32_t windowHeight = frame->height;
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        {
-            const VkImageView attachments[] = {
-                imageWorldP.view, imageNormal.view, imageAlbedo.view,
-                imageRoughness.view, renderTargetDepth.view};
+    const VkFramebufferCreateInfo fbi = {
+        .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext           = NULL,
+        .flags           = 0,
+        .renderPass      = deferredRenderPass,
+        .attachmentCount = 1,
+        .pAttachments    = &frame->aovs[0].view,
+        .width           = windowWidth,
+        .height          = windowHeight,
+        .layers          = 1,
+    };
 
-            const VkFramebufferCreateInfo fbi = {
-                .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .pNext           = NULL,
-                .flags           = 0,
-                .renderPass      = gbufferRenderPass,
-                .attachmentCount = 5,
-                .pAttachments    = attachments,
-                .width           = windowWidth,
-                .height          = windowHeight,
-                .layers          = 1};
-
-            V_ASSERT(vkCreateFramebuffer(device, &fbi, NULL, &gbuffers[i]));
-        }
-        {
-            const VkFramebufferCreateInfo fbi = {
-                .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .pNext           = NULL,
-                .flags           = 0,
-                .renderPass      = deferredRenderPass,
-                .attachmentCount = 1,
-                .pAttachments    = &frame->aovs[0].view,
-                .width           = windowWidth,
-                .height          = windowHeight,
-                .layers          = 1,
-            };
-
-            V_ASSERT(
-                vkCreateFramebuffer(device, &fbi, NULL, &swapImageBuffer[i]));
-        }
-    }
+    V_ASSERT(
+        vkCreateFramebuffer(device, &fbi, NULL, &swapImageBuffer[frame->index]));
 }
 
 static void
@@ -559,8 +560,9 @@ initPipelines(bool openglStyle)
                                  gbufferPipelines);
     obdn_CreateGraphicsPipelines(device, 1, &defferedPipeInfo,
                                  &defferedPipeline);
-    obdn_CreateRayTracePipelines(device, memory, 1, &rtPipelineInfo,
-                                 &raytracePipeline, &shaderBindingTable);
+    if (!raytracing_disabled)
+        obdn_CreateRayTracePipelines(device, memory, 1, &rtPipelineInfo,
+                                     &raytracePipeline, &shaderBindingTable);
 }
 
 static void
@@ -774,7 +776,7 @@ generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t 
         .pClearValues    = clears,
         .renderArea      = {{0, 0}, {windowWidth, windowHeight}},
         .renderPass      = gbufferRenderPass,
-        .framebuffer     = gbuffers[frameIndex]};
+        .framebuffer     = gframebuffer};
 
     vkCmdBeginRenderPass(cmdBuf, &rpassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -784,7 +786,6 @@ generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t 
                           gbufferPipelines[pipeId]);
         uint32_t primCount;
         const Obdn_PrimitiveHandle* prim_handles = obdn_GetPrimlistPrims(&pipelinePrimLists[pipeId], &primCount);
-        printf("Pipeline %d, primCount %d\n", pipeId, primCount);
         for (int i = 0; i < primCount; i++)
         {
             Obdn_PrimitiveHandle prim_handle = prim_handles[i];
@@ -925,8 +926,6 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
                             pipelineLayout, 0, 2,
                             descriptions[frameIndex].descriptorSets, 0, NULL);
 
-    printf("Viewport: w %f, h %f\n", viewport.width, viewport.height);
-
     VkRect2D scissor = {.extent = {windowWidth, windowHeight},
                         .offset = {0, 0}};
 
@@ -941,6 +940,15 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
 
     generateGBuffer(cmdBuf, scene, frameIndex, windowWidth, windowHeight);
 
+    if (raytracing_disabled)
+    {
+        obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                             VK_ACCESS_SHADER_READ_BIT);
+    }
+    else
+    {
     obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                          VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0,
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -955,6 +963,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
     obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
                          VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    }
 
     vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 2,
@@ -968,14 +977,9 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
     deferredRender(cmdBuf, frameIndex, windowWidth, windowHeight);
 }
 
-static void
-cleanUpSwapchainDependent(void)
+static void 
+freeImages(void)
 {
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vkDestroyFramebuffer(device, gbuffers[i], NULL);
-        vkDestroyFramebuffer(device, swapImageBuffer[i], NULL);
-    }
     obdn_FreeImage(&renderTargetDepth);
     obdn_FreeImage(&imageWorldP);
     obdn_FreeImage(&imageNormal);
@@ -985,13 +989,21 @@ cleanUpSwapchainDependent(void)
 }
 
 static void
-onSwapchainRecreate(const Obdn_Frame* fb)
+onDirtyFrame(const Obdn_Frame* fb)
 {
-    vkDeviceWaitIdle(device);
-    cleanUpSwapchainDependent();
-    initAttachments(fb->width, fb->height);
-    initFramebuffers(fb);
-    updateGbufferDescriptors();
+    static uint32_t last_width = 0, last_height = 0;
+
+    obdn_DestroyFramebuffer(device, swapImageBuffer[fb->index]);
+    initSwapFramebuffer(fb);
+
+    if (fb->width != last_width || fb->height != last_height)
+    {
+        vkDeviceWaitIdle(device);
+        initAttachments(fb->width, fb->height);
+        obdn_DestroyFramebuffer(device, gframebuffer);
+        initGbufferFramebuffer(fb->width, fb->height);
+        updateGbufferDescriptors();
+    }
 }
 
 static void
@@ -1096,16 +1108,19 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
         {
             printf("WOAD: PRIMS DIRTY\n");
             sortPipelinePrims(scene);
-            buildAccelerationStructures(scene);
-            updateASDescriptors();
+            if (!raytracing_disabled)
+            {
+                buildAccelerationStructures(scene);
+                updateASDescriptors();
+            }
             framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         }
     }
     if (fb->dirty)
     {
-        onSwapchainRecreate(fb);
-        framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
+        onDirtyFrame(fb);
     }
+
     if (cameraNeedUpdate)
     {
         updateCamera(scene, frameIndex);
@@ -1138,11 +1153,8 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
         }
         texturesNeedUpdate--;
     }
-    if (framesNeedUpdate)
-    {
-        updateRenderCommands(cmdbuf, scene, frameIndex, fb->width, fb->height);
-        framesNeedUpdate--;
-    }
+
+    updateRenderCommands(cmdbuf, scene, frameIndex, fb->width, fb->height);
 }
 
 void
@@ -1153,6 +1165,8 @@ woad_Init(Obdn_Instance* instance, Obdn_Memory* memory_,
                   Woad_Settings_Flags flags)
 {
     hell_Print("Creating Woad renderer...\n");
+    if (flags & WOAD_SETTING_NO_RAYTRACE_BIT)
+        raytracing_disabled = true;
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)
     {
         pipelinePrimLists[i] = obdn_CreatePrimList(8);
@@ -1170,9 +1184,10 @@ woad_Init(Obdn_Instance* instance, Obdn_Memory* memory_,
     initRenderPass(device, fbs[0].aovs[0].format, fbs[0].aovs[1].format,
                    finalColorLayout, finalDepthLayout);
     hell_Print(">> Woad: renderpasses initialized. \n");
+    initGbufferFramebuffer(fbs[0].width, fbs[0].height);
     for (int i = 0; i < fbCount; i++) 
     {
-        initFramebuffers(&fbs[i]);
+        initSwapFramebuffer(&fbs[i]);
     }
     hell_Print(">> Woad: framebuffers initialized. \n");
     initDescriptorSetsAndPipelineLayouts();
@@ -1188,7 +1203,6 @@ woad_Init(Obdn_Instance* instance, Obdn_Memory* memory_,
 void
 woad_Cleanup(void)
 {
-    cleanUpSwapchainDependent();
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)
     {
         vkDestroyPipeline(device, gbufferPipelines[i], NULL);

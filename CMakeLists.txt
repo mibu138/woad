@@ -5,7 +5,7 @@ include(FetchContent)
 
 option(WOAD_SKIP_EXAMPLES OFF)
 
-set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/deps)
+set(FETCHCONTENT_BASE_DIR ${CMAKE_SOURCE_DIR}/deps)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 
 FetchContent_Declare(obsidian GIT_REPOSITORY /home/michaelb/dev/obsidian GIT_TAG leaves)
