@@ -33,9 +33,10 @@ handlePointerInput(const Hell_Event* event, void* data)
     default:
         break;
     }
-    obdn_UpdateCamera_ArcBall(scene, &target, 500, 500, 0.16, mx,
-                              hell_GetMouseX(event), my, hell_GetMouseY(event),
-                              false, lmbdown, false, false);
+    obdn_UpdateCamera_ArcBall(
+        scene, &target, hell_GetWindowWidth(hm.windows[0]),
+        hell_GetWindowHeight(hm.windows[0]), 0.16, mx, hell_GetMouseX(event),
+        my, hell_GetMouseY(event), false, lmbdown, false, false);
     mx = hell_GetMouseX(event);
     my = hell_GetMouseY(event);
     return true;
@@ -53,8 +54,8 @@ frame(u64 fi, u64 dt)
     obdn_WaitForFence(orb.device, &fences[f]);
     vkResetCommandBuffer(cmdbuf, 0);
 
-    //Mat4 cam = obdn_SceneGetCameraXform(scene);
-    //coal_PrintMat4(cam);
+    // Mat4 cam = obdn_SceneGetCameraXform(scene);
+    // coal_PrintMat4(cam);
 
     obdn_BeginCommandBuffer(cmdbuf);
 
@@ -80,7 +81,7 @@ int
 main(int argc, char* argv[])
 {
     hell_Print("Starting\n");
-    hell_OpenHellmouth_NoConsole(frame, NULL, &hm);
+    hell_OpenHellmouth(frame, NULL, &hm);
     Obdn_InstanceParms ip = {.enableRayTracing = true,
                              .surfaceType      = OBDN_SURFACE_TYPE_XCB};
     obdn_CreateOrb(&ip, 50, 50, 200, 0, 0, &orb);
@@ -102,10 +103,12 @@ main(int argc, char* argv[])
 
     obdn_SceneAddPointLight(scene, (Coal_Vec3){0, 2, 0}, (Coal_Vec3){1, 1, 1},
                             1.0);
-    obdn_SceneAddPointLight(scene, (Coal_Vec3){1, 2, 0}, (Coal_Vec3){1, 1, 1},
+    obdn_SceneAddPointLight(scene, (Coal_Vec3){1, 2, 2.5}, (Coal_Vec3){1, 1, 1},
                             1.0);
-    obdn_SceneAddPointLight(scene, (Coal_Vec3){2, 2, 0}, (Coal_Vec3){1, 1, 1},
+    obdn_SceneAddPointLight(scene, (Coal_Vec3){2, 2, 1}, (Coal_Vec3){1, 1, 1},
                             1.0);
+    obdn_SceneAddPointLight(scene, (Coal_Vec3){-1, -1, -2},
+                            (Coal_Vec3){1, 1, 1}, 1.0);
 
     cmdpool = obdn_CreateCommandPool(
         orb.device,

@@ -1022,7 +1022,6 @@ onDirtyFrame(const Obdn_Frame* fb)
 static void
 updateCamera(const Obdn_Scene* scene, uint32_t index)
 {
-    hell_Print("Updating camere! index %d\n", index);
     Camera* uboCam = (Camera*)cameraBuffers[index].hostData;
     uboCam->view   = obdn_SceneGetCameraView(scene);
     uboCam->proj   = obdn_SceneGetCameraProjection(scene);
