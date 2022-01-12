@@ -81,9 +81,9 @@ main(int argc, char* argv[])
 {
     hell_Print("Starting\n");
     hell_OpenHellmouth_NoConsole(frame, NULL, &hm);
-    Obdn_InstanceParms ip = {.enableRayTracing = false,
+    Obdn_InstanceParms ip = {.enableRayTracing = true,
                              .surfaceType      = OBDN_SURFACE_TYPE_XCB};
-    obdn_CreateOrb(&ip, 50, 50, 100, 0, 0, &orb);
+    obdn_CreateOrb(&ip, 50, 50, 200, 0, 0, &orb);
     swapchain = obdn_AllocSwapchain();
     hell_HellmouthAddWindow(&hm, 500, 500, NULL);
     Obdn_AovInfo depth_aov = {.aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -95,7 +95,7 @@ main(int argc, char* argv[])
                          swapchain);
     woad_Init(orb.instance, orb.memory, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 2,
-              obdn_GetSwapchainFrames(swapchain), WOAD_SETTING_NO_RAYTRACE_BIT);
+              obdn_GetSwapchainFrames(swapchain), 0);
 
     scene = obdn_AllocScene();
     obdn_CreateScene(hm.grimoire, orb.memory, 1, 1, 0.01, 100, scene);

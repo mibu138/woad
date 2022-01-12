@@ -494,13 +494,15 @@ initPipelines(bool openglStyle)
                                          .pData         = &sign,
                                          .pMapEntries   = &mapEntry};
 
+    VkFrontFace frontface = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
     const Obdn_GraphicsPipelineInfo gPipelineInfos[] = {
         {
             .renderPass      = gbufferRenderPass,
          .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
             .layout          = pipelineLayout,
             .sampleCount     = VK_SAMPLE_COUNT_1_BIT,
-            .frontFace       = VK_FRONT_FACE_CLOCKWISE,
+            .frontFace       = frontface,
             .attachmentCount = 4,
             .vertexDescription =
                 obdn_GetVertexDescription(3, posNormalUvAttrSizes),
@@ -513,7 +515,7 @@ initPipelines(bool openglStyle)
          .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
          .layout            = pipelineLayout,
          .sampleCount       = VK_SAMPLE_COUNT_1_BIT,
-         .frontFace         = VK_FRONT_FACE_CLOCKWISE,
+         .frontFace         = frontface,
          .attachmentCount   = 4,
          .dynamicStateCount = LEN(dynamicStates),
          .pDynamicStates    = dynamicStates,
@@ -524,7 +526,7 @@ initPipelines(bool openglStyle)
          .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
          .layout            = pipelineLayout,
          .sampleCount       = VK_SAMPLE_COUNT_1_BIT,
-         .frontFace         = VK_FRONT_FACE_CLOCKWISE,
+         .frontFace         = frontface,
          .attachmentCount   = 4,
          .dynamicStateCount = LEN(dynamicStates),
          .pDynamicStates    = dynamicStates,
@@ -938,6 +940,16 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
         VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR,
         sizeof(Mat4) + sizeof(uint32_t) * 2, sizeof(uint32_t), &light_count);
 
+    // ensures that previous frame has already read gbuffer, by ensuring that
+    // all previous commands have completed fragment shader reads.
+    // we could potentially be more fine-grained by using a VkEvent
+    // to wait specifically for that exact read to happen.
+    obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
+                         VK_DEPENDENCY_BY_REGION_BIT,
+                         VK_ACCESS_SHADER_READ_BIT,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+
     generateGBuffer(cmdBuf, scene, frameIndex, windowWidth, windowHeight);
 
     if (raytracing_disabled)
@@ -999,6 +1011,7 @@ onDirtyFrame(const Obdn_Frame* fb)
     if (fb->width != last_width || fb->height != last_height)
     {
         vkDeviceWaitIdle(device);
+        freeImages();
         initAttachments(fb->width, fb->height);
         obdn_DestroyFramebuffer(device, gframebuffer);
         initGbufferFramebuffer(fb->width, fb->height);
@@ -1081,7 +1094,6 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
     static uint8_t lightsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t texturesNeedUpdate  = MAX_FRAMES_IN_FLIGHT;
     static uint8_t materialsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
-    static uint8_t framesNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
 
     int frameIndex = fb->index;
     Obdn_SceneDirtyFlags scene_dirt = obdn_SceneGetDirt(scene);
@@ -1094,15 +1106,15 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
         if (scene_dirt & OBDN_SCENE_LIGHTS_BIT)
         {
             lightsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
-            framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         }
         if (scene_dirt & OBDN_SCENE_XFORMS_BIT)
-            framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
+        {
+        }
         if (scene_dirt & OBDN_SCENE_MATERIALS_BIT)
             materialsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene_dirt & OBDN_SCENE_TEXTURES_BIT)
         {
-            texturesNeedUpdate = framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
+            texturesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         }
         if (scene_dirt & OBDN_SCENE_PRIMS_BIT)
         {
@@ -1113,7 +1125,6 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
                 buildAccelerationStructures(scene);
                 updateASDescriptors();
             }
-            framesNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         }
     }
     if (fb->dirty)
