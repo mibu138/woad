@@ -119,6 +119,7 @@ static Image imageShadow;
 static Image imageAlbedo;
 static Image imageRoughness;
 
+static const VkFormat depthFormat  = VK_FORMAT_D32_SFLOAT;
 static const VkFormat formatImageP = VK_FORMAT_R32G32B32A32_SFLOAT;
 static const VkFormat formatImageN = VK_FORMAT_R32G32B32A32_SFLOAT;
 static const VkFormat formatImageShadow =
@@ -210,151 +211,142 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
 }
 
 static void
-initRenderPass(VkDevice device, VkFormat colorFormat, VkFormat depthFormat,
-               VkImageLayout finalColorLayout, VkImageLayout finalDepthLayout)
+initGbufRenderPass(void)
 {
-    // gbuffer renderpass
-    {
-        VkAttachmentDescription attachmentWorldP = {
-            .flags          = 0,
-            .format         = formatImageP,
-            .samples        = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
-            .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
+    VkAttachmentDescription attachmentWorldP = {
+        .flags          = 0,
+        .format         = formatImageP,
+        .samples        = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
 
-        VkAttachmentDescription attachmentNormal = {
-            .flags          = 0,
-            .format         = formatImageN,
-            .samples        = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
-            .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
+    VkAttachmentDescription attachmentNormal = {
+        .flags          = 0,
+        .format         = formatImageN,
+        .samples        = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
 
-        VkAttachmentDescription attachmentAlbedo = {
-            .flags          = 0,
-            .format         = formatImageAlbedo,
-            .samples        = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
-            .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
+    VkAttachmentDescription attachmentAlbedo = {
+        .flags          = 0,
+        .format         = formatImageAlbedo,
+        .samples        = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
 
-        VkAttachmentDescription attachmentRoughness = {
-            .flags          = 0,
-            .format         = formatImageRoughness,
-            .samples        = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
-            .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
+    VkAttachmentDescription attachmentRoughness = {
+        .flags          = 0,
+        .format         = formatImageRoughness,
+        .samples        = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout    = VK_IMAGE_LAYOUT_GENERAL};
 
-        VkAttachmentDescription attachmentDepth = {
-            .flags          = 0,
-            .format         = depthFormat,
-            .samples        = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentDescription attachmentDepth = {
+        .flags          = 0,
+        .format         = depthFormat,
+        .samples        = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
-        VkAttachmentReference refWorldP = {
-            .attachment = 0,
-            .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference refWorldP = {
+        .attachment = 0,
+        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
-        VkAttachmentReference refNormal = {
-            .attachment = 1,
-            .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference refNormal = {
+        .attachment = 1,
+        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
-        VkAttachmentReference refAlbedo = {
-            .attachment = 2,
-            .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference refAlbedo = {
+        .attachment = 2,
+        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
-        VkAttachmentReference refRough = {
-            .attachment = 3,
-            .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference refRough = {
+        .attachment = 3,
+        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
-        VkAttachmentReference refDepth = {
-            .attachment = 4,
-            .layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference refDepth = {
+        .attachment = 4,
+        .layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
-        VkAttachmentReference colorRefs[] = {refWorldP, refNormal, refAlbedo,
-                                             refRough};
+    VkAttachmentReference colorRefs[] = {refWorldP, refNormal, refAlbedo,
+                                         refRough};
 
-        VkSubpassDescription subpass = {.flags = 0,
-                                        .pipelineBindPoint =
-                                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        .inputAttachmentCount = 0,
-                                        .pInputAttachments    = NULL,
-                                        .colorAttachmentCount = LEN(colorRefs),
-                                        .pColorAttachments    = colorRefs,
-                                        .pResolveAttachments  = NULL,
-                                        .pDepthStencilAttachment = &refDepth,
-                                        .preserveAttachmentCount = 0,
-                                        .pPreserveAttachments    = NULL};
+    VkSubpassDescription subpass = {.flags = 0,
+                                    .pipelineBindPoint =
+                                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    .inputAttachmentCount = 0,
+                                    .pInputAttachments    = NULL,
+                                    .colorAttachmentCount = LEN(colorRefs),
+                                    .pColorAttachments    = colorRefs,
+                                    .pResolveAttachments  = NULL,
+                                    .pDepthStencilAttachment = &refDepth,
+                                    .preserveAttachmentCount = 0,
+                                    .pPreserveAttachments    = NULL};
 
-        VkSubpassDependency dep1 = {
-            .srcSubpass   = VK_SUBPASS_EXTERNAL,
-            .dstSubpass   = 0,
-            .srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            .dstStageMask =
-                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, // may not be
-                                                            // necesary
-            .srcAccessMask = 0,
-            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT};
+    VkSubpassDependency dep1 = {
+        .srcSubpass   = VK_SUBPASS_EXTERNAL,
+        .dstSubpass   = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        .dstStageMask =
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, // may not be
+                                                        // necesary
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT};
 
-        VkSubpassDependency dep2 = {
-            .srcSubpass = 0,
-            .dstSubpass = VK_SUBPASS_EXTERNAL,
-            .srcStageMask =
-                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, // may not be
-                                                            // necesary
-            .dstStageMask    = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            .srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstAccessMask   = 0,
-            .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT};
+    VkSubpassDependency dep2 = {
+        .srcSubpass = 0,
+        .dstSubpass = VK_SUBPASS_EXTERNAL,
+        .srcStageMask =
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, // may not be
+                                                        // necesary
+        .dstStageMask    = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        .srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask   = 0,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT};
 
-        VkSubpassDependency deps[] = {dep1, dep2};
+    VkSubpassDependency deps[] = {dep1, dep2};
 
-        VkAttachmentDescription attachments[] = {
-            attachmentWorldP, attachmentNormal, attachmentAlbedo,
-            attachmentRoughness, attachmentDepth};
+    VkAttachmentDescription attachments[] = {
+        attachmentWorldP, attachmentNormal, attachmentAlbedo,
+        attachmentRoughness, attachmentDepth};
 
-        VkRenderPassCreateInfo rpiInfo = {
-            .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-            .pNext           = NULL,
-            .flags           = 0,
-            .attachmentCount = LEN(attachments),
-            .pAttachments    = attachments,
-            .subpassCount    = 1,
-            .pSubpasses      = &subpass,
-            .dependencyCount = LEN(deps),
-            .pDependencies   = deps};
+    VkRenderPassCreateInfo rpiInfo = {
+        .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext           = NULL,
+        .flags           = 0,
+        .attachmentCount = LEN(attachments),
+        .pAttachments    = attachments,
+        .subpassCount    = 1,
+        .pSubpasses      = &subpass,
+        .dependencyCount = LEN(deps),
+        .pDependencies   = deps};
 
-        V_ASSERT(
-            vkCreateRenderPass(device, &rpiInfo, NULL, &gbufferRenderPass));
-    }
-    printf("Created renderpass 2...\n");
-
-    obdn_CreateRenderPass_Color(device, VK_IMAGE_LAYOUT_UNDEFINED,
-                                finalColorLayout, VK_ATTACHMENT_LOAD_OP_CLEAR,
-                                colorFormat, &deferredRenderPass);
+    V_ASSERT(
+        vkCreateRenderPass(device, &rpiInfo, NULL, &gbufferRenderPass));
 }
 
 static void
@@ -879,11 +871,13 @@ sortPipelinePrims(const Obdn_Scene* scene)
         obdn_ClearPrimList(&pipelinePrimLists[i]);
     }
     obint                 prim_count = 0;
-    const Obdn_Primitive* prims = obdn_SceneGetPrimitives(scene, &prim_count);
+    const Obdn_PrimitiveHandle* prims = obdn_SceneGetDirtyPrimitives(scene, &prim_count);
     for (obint primId = 0; primId < prim_count; primId++)
     {
         AttrMask              attrMask = 0;
-        const Obdn_Primitive* prim     = &prims[primId];
+        const Obdn_PrimitiveHandle handle = prims[primId];
+        const Obdn_Primitive* prim     = obdn_SceneGetPrimitiveConst(scene, handle);
+        if (prim->flags & OBDN_PRIM_INVISIBLE_BIT) continue;
         const Obdn_Geometry*  geo      = prim->geo;
         for (int i = 0; i < geo->attrCount; i++)
         {
@@ -897,15 +891,14 @@ sortPipelinePrims(const Obdn_Scene* scene)
             if (strcmp(name, TANGENT_NAME) == 0)
                 attrMask |= TAN_BIT;
         }
-        Obdn_PrimitiveHandle h = obdn_CreatePrimitiveHandle(primId);
         if (attrMask == POS_NOR_UV_TAN_MASK)
             obdn_AddPrimToList(
-                h, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV_TAN]);
+                handle, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV_TAN]);
         else if (attrMask == POS_NOR_UV_MASK)
-            obdn_AddPrimToList(h,
+            obdn_AddPrimToList(handle,
                                &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV]);
         else if (attrMask == POS_MASK)
-            obdn_AddPrimToList(h, &pipelinePrimLists[PIPELINE_GBUFFER_POS]);
+            obdn_AddPrimToList(handle, &pipelinePrimLists[PIPELINE_GBUFFER_POS]);
         else
         {
             printf("Attributes not supported!\n");
@@ -1096,8 +1089,8 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x, uint32_t 
                   uint32_t height,
         VkCommandBuffer cmdbuf)
 {
-    assert(x + width  <= fb->width);
-    assert(y + height <= fb->height);
+    //assert(x + width  <= fb->width);
+    //assert(y + height <= fb->height);
     static uint8_t cameraNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     // static uint8_t xformsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t lightsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
@@ -1202,8 +1195,10 @@ woad_Init(const Obdn_Instance* instance_, Obdn_Memory* memory_,
 
     initAttachments(fbs[0].width, fbs[0].height);
     hell_Print(">> Woad: attachments initialized. \n");
-    initRenderPass(device, fbs[0].aovs[0].format, fbs[0].aovs[1].format,
-                   finalColorLayout, finalDepthLayout);
+    initGbufRenderPass();
+    obdn_CreateRenderPass_Color(device, VK_IMAGE_LAYOUT_UNDEFINED,
+                                finalColorLayout, VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                fbs[0].aovs[0].format, &deferredRenderPass);
     hell_Print(">> Woad: renderpasses initialized. \n");
     initGbufferFramebuffer(fbs[0].width, fbs[0].height);
     for (int i = 0; i < fbCount; i++) 
