@@ -82,7 +82,7 @@ main(int argc, char* argv[])
 {
     hell_Print("Starting\n");
     hell_OpenHellmouth(frame, NULL, &hm);
-    Obdn_InstanceParms ip = {.enableRayTracing = true,
+    Obdn_InstanceParms ip = {.enableRayTracing = false,
                              .surfaceType      = OBDN_SURFACE_TYPE_XCB};
     obdn_CreateOrb(&ip, 50, 50, 200, 0, 0, &orb);
     swapchain = obdn_AllocSwapchain();
@@ -96,7 +96,7 @@ main(int argc, char* argv[])
                          swapchain);
     woad_Init(orb.instance, orb.memory, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 2,
-              obdn_GetSwapchainFrames(swapchain), 0);
+              obdn_GetSwapchainFrames(swapchain), WOAD_SETTINGS_NO_RAYTRACE_BIT);
 
     scene = obdn_AllocScene();
     obdn_CreateScene(hm.grimoire, orb.memory, 1, 1, 0.01, 100, scene);

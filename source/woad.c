@@ -1175,7 +1175,7 @@ woad_Init(Obdn_Instance* instance, Obdn_Memory* memory_,
                   Woad_Settings_Flags flags)
 {
     hell_Print("Creating Woad renderer...\n");
-    if (flags & WOAD_SETTING_NO_RAYTRACE_BIT)
+    if (flags & WOAD_SETTINGS_NO_RAYTRACE_BIT)
         raytracing_disabled = true;
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)
     {

@@ -4,7 +4,7 @@
 #include <obsidian/obsidian.h>
 
 typedef enum {
-    WOAD_SETTING_NO_RAYTRACE_BIT = 1 << 1
+    WOAD_SETTINGS_NO_RAYTRACE_BIT = 1 << 1
 } Woad_Settings_Flags;
 
 void
