@@ -166,7 +166,7 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
 
     imageShadow =
         obdn_CreateImage(memory, windowWidth, windowHeight, formatImageShadow,
-                         VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT,
+                         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT,
                          VK_SAMPLE_COUNT_1_BIT, 1, OBDN_MEMORY_DEVICE_TYPE);
 
     imageAlbedo = obdn_CreateImage(
@@ -188,7 +188,7 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
     Obdn_Barrier b = {};
     b.srcAccessMask = 0;
     b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    b.srcStageFlags = VK_PIPELINE_STAGE_NONE_KHR;
+    b.srcStageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     b.dstStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
     obdn_CmdTransitionImageLayout(cmdbuf, b, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, imageShadow.handle);
