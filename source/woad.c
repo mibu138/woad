@@ -1047,6 +1047,7 @@ updateLight(const Obdn_Scene* scene, uint32_t frameIndex, uint32_t lightIndex)
 static void
 updateMaterials(const Obdn_Scene* scene, uint32_t frameIndex)
 {
+    _Static_assert(sizeof(Obdn_Material) == 4 * 8, "Check shader material against Obdn_Material\n");
     obint                matcount  = 0;
     const Obdn_Material* materials = obdn_SceneGetMaterials(scene, &matcount);
     memcpy(materialsBuffers[frameIndex].hostData, materials,

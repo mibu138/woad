@@ -24,8 +24,17 @@ void main()
 {
     const vec2 st = vec2(uv.x, -uv.y + 1);
     const Material mat = materials.mat[matId];
-    outAlbedo = vec4(mat.r, mat.g, mat.b, 1);
-    outRoughness = mat.roughness;
+
+    if (mat.textureAlbedo > 0)
+        outAlbedo    = texture(textures[mat.textureAlbedo], st);
+    else
+        outAlbedo = vec4(mat.r, mat.g, mat.b, 1);
+
+    if (mat.textureRoughness > 0)
+        outRoughness = texture(textures[mat.textureRoughness], st).r;
+    else
+        outRoughness = mat.roughness;
+
     outWorld  = vec4(worldPos, 1);
     outNormal = vec4(normalize(normal), 1);
 }
