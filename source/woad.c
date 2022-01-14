@@ -788,7 +788,7 @@ updateTexture(const uint32_t frameIndex, const Obdn_Image* img,
 }
 
 static void
-generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
+generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t frameIndex, uint32_t frame_width, uint32_t frame_height)
 {
     VkClearValue clearValueColor = {1.0f, 0.0f, 0.0f, 0.0f};
     VkClearValue clearValueMatid = {0};
@@ -801,7 +801,7 @@ generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t 
         .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .clearValueCount = LEN(clears),
         .pClearValues    = clears,
-        .renderArea      = {{0, 0}, {windowWidth, windowHeight}},
+        .renderArea      = {{0, 0}, {frame_width, frame_height}},
         .renderPass      = gbufferRenderPass,
         .framebuffer     = gframebuffer};
 
@@ -929,35 +929,16 @@ sortPipelinePrims(const Obdn_Scene* scene)
 }
 
 static void
-updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
+updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const Obdn_Frame* frame,
+        uint32_t region_x, uint32_t region_y,
+        uint32_t region_width, uint32_t region_height)
 {
-
-#if 0
-    VkViewport viewport = {
-        .width = (float)windowWidth,
-        .height = -(float)windowHeight,
-        .minDepth = 0.0,
-        .maxDepth = 1.0,
-        .x = 0, .y = (float)windowHeight
-    };
-#else
-    VkViewport viewport = {.width    = (float)windowWidth,
-                           .height   = (float)windowHeight,
-                           .minDepth = 0.0,
-                           .maxDepth = 1.0,
-                           .x        = 0,
-                           .y        = 0};
-#endif
+    uint32_t frameIndex = frame->index;
+    obdn_CmdSetViewportScissor(cmdBuf, region_x, region_y, region_width, region_height);
 
     vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 2,
                             descriptions[frameIndex].descriptorSets, 0, NULL);
-
-    VkRect2D scissor = {.extent = {windowWidth, windowHeight},
-                        .offset = {0, 0}};
-
-    vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
-    vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
     uint32_t light_count = obdn_SceneGetLightCount(scene);
     vkCmdPushConstants(
@@ -975,7 +956,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
                          VK_ACCESS_SHADER_READ_BIT,
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 
-    generateGBuffer(cmdBuf, scene, frameIndex, windowWidth, windowHeight);
+    generateGBuffer(cmdBuf, scene, frameIndex, frame->width, frame->height);
 
     if (raytracing_disabled)
     {
@@ -995,7 +976,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
                             pipelineLayout, 0, 2,
                             descriptions[frameIndex].descriptorSets, 0, NULL);
 
-    shadowPass(cmdBuf, frameIndex, windowWidth, windowHeight);
+    shadowPass(cmdBuf, frameIndex, region_width, region_height);
 
     obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
@@ -1011,7 +992,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint
 
     // vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 
-    deferredRender(cmdBuf, frameIndex, windowWidth, windowHeight);
+    deferredRender(cmdBuf, frameIndex, frame->width, frame->height);
 }
 
 static void 
@@ -1111,8 +1092,12 @@ buildAccelerationStructures(const Obdn_Scene* scene)
 }
 
 void
-woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbuf)
+woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x, uint32_t y, uint32_t width,
+                  uint32_t height,
+        VkCommandBuffer cmdbuf)
 {
+    assert(x + width  <= fb->width);
+    assert(y + height <= fb->height);
     static uint8_t cameraNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     // static uint8_t xformsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t lightsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
@@ -1189,7 +1174,7 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
         texturesNeedUpdate--;
     }
 
-    updateRenderCommands(cmdbuf, scene, frameIndex, fb->width, fb->height);
+    updateRenderCommands(cmdbuf, scene, fb, x, y, width, height);
 }
 
 void

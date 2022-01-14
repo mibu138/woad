@@ -1,6 +1,10 @@
 #ifndef WOAD_WOAD_H
 #define WOAD_WOAD_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <obsidian/obsidian.h>
 
 typedef enum {
@@ -14,9 +18,14 @@ woad_Init(const Obdn_Instance* instance, Obdn_Memory* memory,
                   const Obdn_Frame fbs[/*fbCount*/],
                   Woad_Settings_Flags flags);
 void
-woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbuf);
+woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x, uint32_t y, uint32_t width,
+                  uint32_t height, VkCommandBuffer cmdbuf);
 
 void
 woad_Cleanup(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // WOAD_WOAD_H

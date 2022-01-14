@@ -59,7 +59,7 @@ frame(u64 fi, u64 dt)
 
     obdn_BeginCommandBuffer(cmdbuf);
 
-    woad_Render(scene, frame, cmdbuf);
+    woad_Render(scene, frame, 0, 0, frame->width, frame->height, cmdbuf);
 
     obdn_EndCommandBuffer(cmdbuf);
 

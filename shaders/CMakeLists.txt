@@ -1,5 +1,5 @@
 include(author_shaders)
-author_shaders(shaders 
+author_shaders(woad_shaders 
     woad
     Obsidian::glslc
     SOURCES 
