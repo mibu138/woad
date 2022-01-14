@@ -31,4 +31,3 @@ void main()
     vec3 N = normalize(cross(bitang, tanget));
     outNormal = vec4(N, 1); //wrong but for now...
 }
-

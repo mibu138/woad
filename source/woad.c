@@ -94,6 +94,7 @@ static BufferRegion xformsBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion lightsBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion materialsBuffers[MAX_FRAMES_IN_FLIGHT];
 
+static const Obdn_Instance* instance;
 static Obdn_Memory* memory;
 static VkDevice     device;
 
@@ -180,8 +181,32 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
         VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT, 1,
         OBDN_MEMORY_DEVICE_TYPE);
 
-    obdn_TransitionImageLayout(imageShadow.layout, VK_IMAGE_LAYOUT_GENERAL,
-                               &imageShadow);
+    Obdn_CommandPool pool = obdn_CreateCommandPool(device, graphic_queue_family_index, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, 1);
+    VkCommandBuffer cmdbuf = pool.cmdbufs[0];
+    obdn_BeginCommandBuffer(cmdbuf);
+
+    Obdn_Barrier b = {};
+    b.srcAccessMask = 0;
+    b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    b.srcStageFlags = VK_PIPELINE_STAGE_NONE_KHR;
+    b.dstStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+    obdn_CmdTransitionImageLayout(cmdbuf, b, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, imageShadow.handle);
+
+    obdn_CmdClearColorImage(cmdbuf, imageShadow.handle, VK_IMAGE_LAYOUT_GENERAL, 0, 1, 1.0, 0, 0, 0);
+
+    obdn_EndCommandBuffer(cmdbuf);
+
+    VkSubmitInfo si = obdn_SubmitInfo(0, NULL, NULL, 1, &cmdbuf, 0, NULL);
+
+    VkQueue queue = obdn_GetGrahicsQueue(instance, 0);
+    VkFence fence;
+    obdn_CreateFence(device, &fence);
+    vkQueueSubmit(queue, 1, &si, fence);
+    obdn_WaitForFence(device, &fence);
+
+    obdn_DestroyFence(device, fence);
+    obdn_DestroyCommandPool(device, &pool);
 }
 
 static void
@@ -1168,13 +1193,14 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, VkCommandBuffer cmdbu
 }
 
 void
-woad_Init(Obdn_Instance* instance, Obdn_Memory* memory_,
+woad_Init(const Obdn_Instance* instance_, Obdn_Memory* memory_,
                   VkImageLayout finalColorLayout,
                   VkImageLayout finalDepthLayout, uint32_t fbCount,
                   const Obdn_Frame fbs[/*fbCount*/],
                   Woad_Settings_Flags flags)
 {
     hell_Print("Creating Woad renderer...\n");
+    instance = instance_;
     if (flags & WOAD_SETTINGS_NO_RAYTRACE_BIT)
         raytracing_disabled = true;
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)

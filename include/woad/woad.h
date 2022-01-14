@@ -8,7 +8,7 @@ typedef enum {
 } Woad_Settings_Flags;
 
 void
-woad_Init(Obdn_Instance* instance, Obdn_Memory* memory,
+woad_Init(const Obdn_Instance* instance, Obdn_Memory* memory,
                   VkImageLayout finalColorLayout,
                   VkImageLayout finalDepthLayout, uint32_t fbCount,
                   const Obdn_Frame fbs[/*fbCount*/],
