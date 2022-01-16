@@ -8,9 +8,9 @@
 #include <hell/len.h>
 #include <memory.h>
 #include <obsidian/attribute.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
 
 typedef Obdn_Command               Command;
 typedef Obdn_Image                 Image;
@@ -30,9 +30,10 @@ enum {
     NORMAL_BIT = 1 << 1,
     UV_BIT     = 1 << 2,
     TAN_BIT    = 1 << 3,
+    SIGN_BIT   = 1 << 4,
 };
 
-#define POS_NOR_UV_TAN_MASK (POS_BIT | NORMAL_BIT | UV_BIT | TAN_BIT)
+#define POS_NOR_UV_TAN_MASK (POS_BIT | NORMAL_BIT | UV_BIT | TAN_BIT | SIGN_BIT)
 #define POS_NOR_UV_MASK (POS_BIT | NORMAL_BIT | UV_BIT)
 #define POS_MASK (POS_BIT)
 
@@ -95,14 +96,14 @@ static BufferRegion lightsBuffers[MAX_FRAMES_IN_FLIGHT];
 static BufferRegion materialsBuffers[MAX_FRAMES_IN_FLIGHT];
 
 static const Obdn_Instance* instance;
-static Obdn_Memory* memory;
-static VkDevice     device;
+static Obdn_Memory*         memory;
+static VkDevice             device;
 
 static Obdn_PrimitiveList pipelinePrimLists[GBUFFER_PIPELINE_COUNT];
 
 // raytrace stuff
 
-static Hell_Array blas_array;
+static Hell_Array            blas_array;
 static AccelerationStructure tlas;
 
 // raytrace stuff
@@ -125,7 +126,7 @@ static const VkFormat formatImageN = VK_FORMAT_R32G32B32A32_SFLOAT;
 static const VkFormat formatImageShadow =
     VK_FORMAT_R16_UINT; // maximum of 16 lights.
 static const VkFormat formatImageAlbedo    = VK_FORMAT_R8G8B8A8_UNORM;
-static const VkFormat formatImageRoughness = VK_FORMAT_R16_UNORM;
+static const VkFormat formatImageRoughness = VK_FORMAT_R32_SFLOAT;
 
 // declarations for overview and navigation
 static void initDescriptorSetsAndPipelineLayouts(void);
@@ -136,7 +137,7 @@ static bool raytracing_disabled = false;
 
 void r_InitRenderer(const Obdn_Scene* scene_, VkImageLayout finalImageLayout,
                     bool openglStyle);
-void        r_CleanUp(void);
+void r_CleanUp(void);
 uint8_t
 r_GetMaxFramesInFlight(void)
 {
@@ -165,10 +166,11 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
         VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT, 1,
         OBDN_MEMORY_DEVICE_TYPE);
 
-    imageShadow =
-        obdn_CreateImage(memory, windowWidth, windowHeight, formatImageShadow,
-                         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT,
-                         VK_SAMPLE_COUNT_1_BIT, 1, OBDN_MEMORY_DEVICE_TYPE);
+    imageShadow = obdn_CreateImage(
+        memory, windowWidth, windowHeight, formatImageShadow,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT, 1,
+        OBDN_MEMORY_DEVICE_TYPE);
 
     imageAlbedo = obdn_CreateImage(
         memory, windowWidth, windowHeight, formatImageAlbedo,
@@ -182,19 +184,24 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
         VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT, 1,
         OBDN_MEMORY_DEVICE_TYPE);
 
-    Obdn_CommandPool pool = obdn_CreateCommandPool(device, graphic_queue_family_index, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, 1);
+    Obdn_CommandPool pool =
+        obdn_CreateCommandPool(device, graphic_queue_family_index,
+                               VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, 1);
     VkCommandBuffer cmdbuf = pool.cmdbufs[0];
     obdn_BeginCommandBuffer(cmdbuf);
 
-    Obdn_Barrier b = {};
+    Obdn_Barrier b  = {};
     b.srcAccessMask = 0;
     b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     b.srcStageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     b.dstStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-    obdn_CmdTransitionImageLayout(cmdbuf, b, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, imageShadow.handle);
+    obdn_CmdTransitionImageLayout(cmdbuf, b, VK_IMAGE_LAYOUT_UNDEFINED,
+                                  VK_IMAGE_LAYOUT_GENERAL, 1,
+                                  imageShadow.handle);
 
-    obdn_CmdClearColorImage(cmdbuf, imageShadow.handle, VK_IMAGE_LAYOUT_GENERAL, 0, 1, 1.0, 0, 0, 0);
+    obdn_CmdClearColorImage(cmdbuf, imageShadow.handle, VK_IMAGE_LAYOUT_GENERAL,
+                            0, 1, 1.0, 0, 0, 0);
 
     obdn_EndCommandBuffer(cmdbuf);
 
@@ -269,20 +276,16 @@ initGbufRenderPass(void)
         .finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
     VkAttachmentReference refWorldP = {
-        .attachment = 0,
-        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        .attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
     VkAttachmentReference refNormal = {
-        .attachment = 1,
-        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        .attachment = 1, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
     VkAttachmentReference refAlbedo = {
-        .attachment = 2,
-        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        .attachment = 2, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
     VkAttachmentReference refRough = {
-        .attachment = 3,
-        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        .attachment = 3, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
     VkAttachmentReference refDepth = {
         .attachment = 4,
@@ -294,11 +297,11 @@ initGbufRenderPass(void)
     VkSubpassDescription subpass = {.flags = 0,
                                     .pipelineBindPoint =
                                         VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    .inputAttachmentCount = 0,
-                                    .pInputAttachments    = NULL,
-                                    .colorAttachmentCount = LEN(colorRefs),
-                                    .pColorAttachments    = colorRefs,
-                                    .pResolveAttachments  = NULL,
+                                    .inputAttachmentCount    = 0,
+                                    .pInputAttachments       = NULL,
+                                    .colorAttachmentCount    = LEN(colorRefs),
+                                    .pColorAttachments       = colorRefs,
+                                    .pResolveAttachments     = NULL,
                                     .pDepthStencilAttachment = &refDepth,
                                     .preserveAttachmentCount = 0,
                                     .pPreserveAttachments    = NULL};
@@ -323,9 +326,9 @@ initGbufRenderPass(void)
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, // may not be
                                                         // necesary
-        .dstStageMask    = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        .dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         .srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .dstAccessMask   = 0,
+        .dstAccessMask   = VK_ACCESS_SHADER_READ_BIT,
         .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT};
 
     VkSubpassDependency deps[] = {dep1, dep2};
@@ -345,16 +348,15 @@ initGbufRenderPass(void)
         .dependencyCount = LEN(deps),
         .pDependencies   = deps};
 
-    V_ASSERT(
-        vkCreateRenderPass(device, &rpiInfo, NULL, &gbufferRenderPass));
+    V_ASSERT(vkCreateRenderPass(device, &rpiInfo, NULL, &gbufferRenderPass));
 }
 
 static void
 initGbufferFramebuffer(u32 w, u32 h)
 {
-    const VkImageView attachments[] = {
-        imageWorldP.view, imageNormal.view, imageAlbedo.view,
-        imageRoughness.view, renderTargetDepth.view};
+    const VkImageView attachments[] = {imageWorldP.view, imageNormal.view,
+                                       imageAlbedo.view, imageRoughness.view,
+                                       renderTargetDepth.view};
 
     const VkFramebufferCreateInfo fbi = {
         .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -373,22 +375,22 @@ initGbufferFramebuffer(u32 w, u32 h)
 static void
 initSwapFramebuffer(const Obdn_Frame* frame)
 {
-    uint32_t windowWidth = frame->width;
-    uint32_t windowHeight = frame->height;
-    const VkFramebufferCreateInfo fbi = {
-        .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .pNext           = NULL,
-        .flags           = 0,
-        .renderPass      = deferredRenderPass,
-        .attachmentCount = 1,
-        .pAttachments    = &frame->aovs[0].view,
-        .width           = windowWidth,
-        .height          = windowHeight,
-        .layers          = 1,
+    uint32_t                      windowWidth  = frame->width;
+    uint32_t                      windowHeight = frame->height;
+    const VkFramebufferCreateInfo fbi          = {
+                 .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                 .pNext           = NULL,
+                 .flags           = 0,
+                 .renderPass      = deferredRenderPass,
+                 .attachmentCount = 1,
+                 .pAttachments    = &frame->aovs[0].view,
+                 .width           = windowWidth,
+                 .height          = windowHeight,
+                 .layers          = 1,
     };
 
-    V_ASSERT(
-        vkCreateFramebuffer(device, &fbi, NULL, &swapImageBuffer[frame->index]));
+    V_ASSERT(vkCreateFramebuffer(device, &fbi, NULL,
+                                 &swapImageBuffer[frame->index]));
 }
 
 static void
@@ -496,7 +498,7 @@ initPipelines(bool openglStyle)
 {
     const Obdn_GeoAttributeSize posAttrSizes[]          = {12};
     const Obdn_GeoAttributeSize posNormalUvAttrSizes[3] = {12, 12, 8};
-    const Obdn_GeoAttributeSize tangetPrimAttrSizes[4]  = {12, 12, 8, 12};
+    const Obdn_GeoAttributeSize tanAttrSizes[5] = {12, 12, 12, 4, 8};
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
                                       VK_DYNAMIC_STATE_SCISSOR};
@@ -513,14 +515,38 @@ initPipelines(bool openglStyle)
 
     VkFrontFace frontface = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
+    Obdn_VertexDescription tangent_vert_description = {
+        .attributeCount = 5,
+        .attributeDescriptions = {
+            // pos
+            { .location = 0, .binding = 0, .format = OBDN_VERT_POS_FORMAT, .offset = 0 },
+            // normal
+            { .location = 1, .binding = 1, .format = OBDN_VERT_POS_FORMAT, .offset = 0 },
+            // tangent
+            { .location = 2, .binding = 2, .format = OBDN_VERT_POS_FORMAT, .offset = 0 },
+            // sign
+            { .location = 3, .binding = 3, .format = VK_FORMAT_R32_SFLOAT, .offset = 0 },
+            // uvs
+            { .location = 4, .binding = 4, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0 },
+        },
+        .bindingCount = 5,
+        .bindingDescriptions = {
+            { .binding = 0, .stride = 12, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+            { .binding = 1, .stride = 12, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+            { .binding = 2, .stride = 12, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+            { .binding = 3, .stride = 4, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+            { .binding = 4, .stride = 8, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+        }
+    };
+
     const Obdn_GraphicsPipelineInfo gPipelineInfos[] = {
         {
-            .renderPass      = gbufferRenderPass,
-         .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            .layout          = pipelineLayout,
-            .sampleCount     = VK_SAMPLE_COUNT_1_BIT,
-            .frontFace       = frontface,
-            .attachmentCount = 4,
+            .renderPass        = gbufferRenderPass,
+            .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .layout            = pipelineLayout,
+            .sampleCount       = VK_SAMPLE_COUNT_1_BIT,
+            .frontFace         = frontface,
+            .attachmentCount   = 4,
             .vertexDescription =
                 obdn_GetVertexDescription(3, posNormalUvAttrSizes),
             .dynamicStateCount = LEN(dynamicStates),
@@ -536,7 +562,7 @@ initPipelines(bool openglStyle)
          .attachmentCount   = 4,
          .dynamicStateCount = LEN(dynamicStates),
          .pDynamicStates    = dynamicStates,
-         .vertexDescription = obdn_GetVertexDescription(4, tangetPrimAttrSizes),
+         .vertexDescription = obdn_GetVertexDescription(5, tanAttrSizes),
          .vertShader        = "woad/tangent.vert.spv",
          .fragShader        = "woad/gbuffertan.frag.spv"},
         {.renderPass        = gbufferRenderPass,
@@ -555,7 +581,7 @@ initPipelines(bool openglStyle)
 
     const Obdn_GraphicsPipelineInfo defferedPipeInfo = {
         .renderPass        = deferredRenderPass,
-         .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .layout            = pipelineLayout,
         .sampleCount       = VK_SAMPLE_COUNT_1_BIT,
         .frontFace         = VK_FRONT_FACE_CLOCKWISE,
@@ -760,9 +786,10 @@ static void
 updateTexture(const uint32_t frameIndex, const Obdn_Image* img,
               const uint32_t texId)
 {
-    VkDescriptorImageInfo textureInfo = {.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                         .imageView   = img->view,
-                                         .sampler     = img->sampler};
+    VkDescriptorImageInfo textureInfo = {
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .imageView   = img->view,
+        .sampler     = img->sampler};
 
     VkWriteDescriptorSet write = {
         .sType      = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -780,9 +807,11 @@ updateTexture(const uint32_t frameIndex, const Obdn_Image* img,
 }
 
 static void
-generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t frameIndex, uint32_t frame_width, uint32_t frame_height)
+generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene,
+                const uint32_t frameIndex, uint32_t frame_width,
+                uint32_t frame_height)
 {
-    VkClearValue clearValueColor = {1.0f, 0.0f, 0.0f, 0.0f};
+    VkClearValue clearValueColor = {0.1f, 0.1f, 0.1f, 1.0f};
     VkClearValue clearValueMatid = {0};
     VkClearValue clearValueDepth = {1.0, 0};
 
@@ -803,11 +832,12 @@ generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t 
     {
         vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           gbufferPipelines[pipeId]);
-        uint32_t primCount;
-        const Obdn_PrimitiveHandle* prim_handles = obdn_GetPrimlistPrims(&pipelinePrimLists[pipeId], &primCount);
+        uint32_t                    primCount;
+        const Obdn_PrimitiveHandle* prim_handles =
+            obdn_GetPrimlistPrims(&pipelinePrimLists[pipeId], &primCount);
         for (int i = 0; i < primCount; i++)
         {
-            Obdn_PrimitiveHandle prim_handle = prim_handles[i];
+            Obdn_PrimitiveHandle  prim_handle = prim_handles[i];
             const Obdn_Primitive* prim =
                 obdn_SceneGetPrimitiveConst(scene, prim_handle);
             Obdn_MaterialHandle matId = prim->material;
@@ -829,7 +859,8 @@ generateGBuffer(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const uint32_t 
 }
 
 static void
-shadowPass(VkCommandBuffer cmdBuf, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
+shadowPass(VkCommandBuffer cmdBuf, const uint32_t frameIndex,
+           uint32_t windowWidth, uint32_t windowHeight)
 {
     vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                       raytracePipeline);
@@ -841,9 +872,10 @@ shadowPass(VkCommandBuffer cmdBuf, const uint32_t frameIndex, uint32_t windowWid
 }
 
 static void
-deferredRender(VkCommandBuffer cmdBuf, const uint32_t frameIndex, uint32_t windowWidth, uint32_t windowHeight)
+deferredRender(VkCommandBuffer cmdBuf, const uint32_t frameIndex,
+               uint32_t windowWidth, uint32_t windowHeight)
 {
-    VkClearValue clearValueColor = {1.0f, 0.0f, 0.0f, 0.0f};
+    VkClearValue clearValueColor = {0.1f, 0.1f, 0.1f, 1.0f};
 
     VkRenderPassBeginInfo rpassInfo = {
         .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -870,15 +902,17 @@ sortPipelinePrims(const Obdn_Scene* scene)
     {
         obdn_ClearPrimList(&pipelinePrimLists[i]);
     }
-    obint                 prim_count = 0;
-    const Obdn_PrimitiveHandle* prims = obdn_SceneGetDirtyPrimitives(scene, &prim_count);
+    obint                       prim_count = 0;
+    const Obdn_PrimitiveHandle* prims =
+        obdn_SceneGetDirtyPrimitives(scene, &prim_count);
     for (obint primId = 0; primId < prim_count; primId++)
     {
-        AttrMask              attrMask = 0;
-        const Obdn_PrimitiveHandle handle = prims[primId];
-        const Obdn_Primitive* prim     = obdn_SceneGetPrimitiveConst(scene, handle);
-        if (prim->flags & OBDN_PRIM_INVISIBLE_BIT) continue;
-        const Obdn_Geometry*  geo      = prim->geo;
+        AttrMask                   attrMask = 0;
+        const Obdn_PrimitiveHandle handle   = prims[primId];
+        const Obdn_Primitive* prim = obdn_SceneGetPrimitiveConst(scene, handle);
+        if (prim->flags & OBDN_PRIM_INVISIBLE_BIT)
+            continue;
+        const Obdn_Geometry* geo = prim->geo;
         for (int i = 0; i < geo->attrCount; i++)
         {
             const char* name = geo->attrNames[i];
@@ -890,6 +924,8 @@ sortPipelinePrims(const Obdn_Scene* scene)
                 attrMask |= UV_BIT;
             if (strcmp(name, TANGENT_NAME) == 0)
                 attrMask |= TAN_BIT;
+            if (strcmp(name, SIGN_NAME) == 0)
+                attrMask |= SIGN_BIT;
         }
         if (attrMask == POS_NOR_UV_TAN_MASK)
             obdn_AddPrimToList(
@@ -898,7 +934,8 @@ sortPipelinePrims(const Obdn_Scene* scene)
             obdn_AddPrimToList(handle,
                                &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV]);
         else if (attrMask == POS_MASK)
-            obdn_AddPrimToList(handle, &pipelinePrimLists[PIPELINE_GBUFFER_POS]);
+            obdn_AddPrimToList(handle,
+                               &pipelinePrimLists[PIPELINE_GBUFFER_POS]);
         else
         {
             printf("Attributes not supported!\n");
@@ -922,12 +959,14 @@ sortPipelinePrims(const Obdn_Scene* scene)
 }
 
 static void
-updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const Obdn_Frame* frame,
-        uint32_t region_x, uint32_t region_y,
-        uint32_t region_width, uint32_t region_height)
+updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene,
+                     const Obdn_Frame* frame, uint32_t region_x,
+                     uint32_t region_y, uint32_t region_width,
+                     uint32_t region_height)
 {
     uint32_t frameIndex = frame->index;
-    obdn_CmdSetViewportScissor(cmdBuf, region_x, region_y, region_width, region_height);
+    obdn_CmdSetViewportScissor(cmdBuf, region_x, region_y, region_width,
+                               region_height);
 
     vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 2,
@@ -944,36 +983,32 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const Obdn
     // we could potentially be more fine-grained by using a VkEvent
     // to wait specifically for that exact read to happen.
     obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
-                         VK_DEPENDENCY_BY_REGION_BIT,
-                         VK_ACCESS_SHADER_READ_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_DEPENDENCY_BY_REGION_BIT, VK_ACCESS_SHADER_READ_BIT,
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 
     generateGBuffer(cmdBuf, scene, frameIndex, frame->width, frame->height);
 
     if (raytracing_disabled)
     {
-        obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                             VK_ACCESS_SHADER_READ_BIT);
     }
     else
     {
-    obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                         VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0,
-                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                         VK_ACCESS_SHADER_READ_BIT);
+        obdn_v_MemoryBarrier(
+            cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
-    vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-                            pipelineLayout, 0, 2,
-                            descriptions[frameIndex].descriptorSets, 0, NULL);
+        vkCmdBindDescriptorSets(
+            cmdBuf, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelineLayout, 0,
+            2, descriptions[frameIndex].descriptorSets, 0, NULL);
 
-    shadowPass(cmdBuf, frameIndex, region_width, region_height);
+        shadowPass(cmdBuf, frameIndex, region_width, region_height);
 
-    obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-                         VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+        obdn_v_MemoryBarrier(
+            cmdBuf, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
     }
 
     vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -988,7 +1023,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const Obdn_Scene* scene, const Obdn
     deferredRender(cmdBuf, frameIndex, frame->width, frame->height);
 }
 
-static void 
+static void
 freeImages(void)
 {
     obdn_FreeImage(&renderTargetDepth);
@@ -1047,7 +1082,8 @@ updateLight(const Obdn_Scene* scene, uint32_t frameIndex, uint32_t lightIndex)
 static void
 updateMaterials(const Obdn_Scene* scene, uint32_t frameIndex)
 {
-    _Static_assert(sizeof(Obdn_Material) == 4 * 8, "Check shader material against Obdn_Material\n");
+    _Static_assert(sizeof(Obdn_Material) == 4 * 8,
+                   "Check shader material against Obdn_Material\n");
     obint                matcount  = 0;
     const Obdn_Material* materials = obdn_SceneGetMaterials(scene, &matcount);
     memcpy(materialsBuffers[frameIndex].hostData, materials,
@@ -1059,8 +1095,8 @@ buildAccelerationStructures(const Obdn_Scene* scene)
 {
     Hell_Array xforms;
     hell_CreateArray(8, sizeof(Coal_Mat4), NULL, NULL, &xforms);
-    obint                 prim_count = 0;
-    const Obdn_Primitive* prims = obdn_SceneGetPrimitives(scene, &prim_count);
+    obint                  prim_count = 0;
+    const Obdn_Primitive*  prims = obdn_SceneGetPrimitives(scene, &prim_count);
     AccelerationStructure* blasses = blas_array.elems;
     for (int i = 0; i < blas_array.count; i++)
     {
@@ -1079,26 +1115,26 @@ buildAccelerationStructures(const Obdn_Scene* scene)
             hell_ArrayPush(&blas_array, &blas);
             hell_ArrayPush(&xforms, &prims[i].xform);
         }
-        obdn_BuildTlas(memory, prim_count, blas_array.elems, xforms.elems, &tlas);
+        obdn_BuildTlas(memory, prim_count, blas_array.elems, xforms.elems,
+                       &tlas);
     }
     hell_DestroyArray(&xforms, NULL);
     printf(">>>>> Built acceleration structures\n");
 }
 
 void
-woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x, uint32_t y, uint32_t width,
-                  uint32_t height,
-        VkCommandBuffer cmdbuf)
+woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x,
+            uint32_t y, uint32_t width, uint32_t height, VkCommandBuffer cmdbuf)
 {
-    //assert(x + width  <= fb->width);
-    //assert(y + height <= fb->height);
+    // assert(x + width  <= fb->width);
+    // assert(y + height <= fb->height);
     static uint8_t cameraNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     // static uint8_t xformsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t lightsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t texturesNeedUpdate  = MAX_FRAMES_IN_FLIGHT;
     static uint8_t materialsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
 
-    int frameIndex = fb->index;
+    int                  frameIndex = fb->index;
     Obdn_SceneDirtyFlags scene_dirt = obdn_SceneGetDirt(scene);
     if (scene_dirt)
     {
@@ -1142,9 +1178,9 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x, uint32_t 
     }
     if (lightsNeedUpdate)
     {
-        obint light_count;
+        obint       light_count;
         Obdn_Light* scene_lights = obdn_SceneGetLights(scene, &light_count);
-        Lights* lights = (Lights*)lightsBuffers[frameIndex].hostData;
+        Lights*     lights       = (Lights*)lightsBuffers[frameIndex].hostData;
         memcpy(lights, scene_lights, sizeof(Light) * light_count);
         lightsNeedUpdate--;
         printf("Tanto: lights sync\n");
@@ -1173,10 +1209,9 @@ woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x, uint32_t 
 
 void
 woad_Init(const Obdn_Instance* instance_, Obdn_Memory* memory_,
-                  VkImageLayout finalColorLayout,
-                  VkImageLayout finalDepthLayout, uint32_t fbCount,
-                  const Obdn_Frame fbs[/*fbCount*/],
-                  Woad_Settings_Flags flags)
+          VkImageLayout finalColorLayout, VkImageLayout finalDepthLayout,
+          uint32_t fbCount, const Obdn_Frame fbs[/*fbCount*/],
+          Woad_Settings_Flags flags)
 {
     hell_Print("Creating Woad renderer...\n");
     instance = instance_;
@@ -1202,14 +1237,13 @@ woad_Init(const Obdn_Instance* instance_, Obdn_Memory* memory_,
                                 fbs[0].aovs[0].format, &deferredRenderPass);
     hell_Print(">> Woad: renderpasses initialized. \n");
     initGbufferFramebuffer(fbs[0].width, fbs[0].height);
-    for (int i = 0; i < fbCount; i++) 
+    for (int i = 0; i < fbCount; i++)
     {
         initSwapFramebuffer(&fbs[i]);
     }
     hell_Print(">> Woad: framebuffers initialized. \n");
     initDescriptorSetsAndPipelineLayouts();
-    hell_Print(
-        ">> Woad: descriptor sets and pipeline layouts initialized. \n");
+    hell_Print(">> Woad: descriptor sets and pipeline layouts initialized. \n");
     updateDescriptors();
     hell_Print(">> Woad: descriptors updated. \n");
     initPipelines(false);
