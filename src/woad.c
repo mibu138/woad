@@ -207,7 +207,7 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
 
     VkSubmitInfo si = obdn_SubmitInfo(0, NULL, NULL, 1, &cmdbuf, 0, NULL);
 
-    VkQueue queue = obdn_GetGrahicsQueue(instance, 0);
+    VkQueue queue = obdn_GetGraphicsQueue(instance, 0);
     VkFence fence;
     obdn_CreateFence(device, &fence);
     vkQueueSubmit(queue, 1, &si, fence);

@@ -9,6 +9,7 @@ Obdn_Orb        orb;
 Obdn_Swapchain* swapchain;
 
 Obdn_Scene* scene;
+Obdn_Geometry geo;
 
 Obdn_CommandPool cmdpool;
 
@@ -43,7 +44,7 @@ handlePointerInput(const Hell_Event* event, void* data)
 }
 
 void
-frame(u64 fi, u64 dt)
+frame(i64 fi, i64 dt)
 {
     u32 f = fi % 2;
 
@@ -68,7 +69,7 @@ frame(u64 fi, u64 dt)
         &(VkPipelineStageFlags){VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT}, 1, &cmdbuf,
         1, &rendered_semas[f]);
 
-    VkQueue queue = obdn_GetGrahicsQueue(orb.instance, 0);
+    VkQueue queue = obdn_GetGraphicsQueue(orb.instance, 0);
 
     vkQueueSubmit(queue, 1, &si, fences[f]);
 
@@ -100,6 +101,10 @@ main(int argc, char* argv[])
 
     scene = obdn_AllocScene();
     obdn_CreateScene(hm.grimoire, orb.memory, 1, 1, 0.01, 100, scene);
+
+    geo = obdn_CreateCube(orb.memory, false);
+
+    obdn_SceneAddPrim(scene, &geo, COAL_MAT4_IDENT, (Obdn_MaterialHandle){0});
 
     obdn_SceneAddPointLight(scene, (Coal_Vec3){0, 2, 0}, (Coal_Vec3){1, 1, 1},
                             1.0);
