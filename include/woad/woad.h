@@ -20,11 +20,14 @@ typedef struct WoadFrame {
     uint8_t     index;
 } WoadFrame;
 
+WoadFrame
+woad_Frame(const OnyxSwapchainImage *img);
+
 void
 woad_Init(const OnyxInstance* instance, OnyxMemory* memory,
                   VkImageLayout finalColorLayout,
-                  VkImageLayout finalDepthLayout, uint32_t fbCount,
-                  const WoadFrame fbs[/*fbCount*/],
+                  VkImageLayout finalDepthLayout,
+                  const OnyxSwapchain *swapchain,
                   Woad_Settings_Flags flags);
 void
 woad_Render(const OnyxScene* scene, const WoadFrame *fb, uint32_t x, uint32_t y, uint32_t width,

@@ -1336,7 +1336,7 @@ woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
 void
 woad_Init(const OnyxInstance* instance_, OnyxMemory* memory_,
           VkImageLayout finalColorLayout, VkImageLayout finalDepthLayout,
-          uint32_t fbCount, const WoadFrame fbs[/*fbCount*/],
+          const OnyxSwapchain *swapchain,
           Woad_Settings_Flags flags)
 {
     hell_print("Creating Woad renderer...\n");
@@ -1355,17 +1355,31 @@ woad_Init(const OnyxInstance* instance_, OnyxMemory* memory_,
         onyx_queue_family_index(instance, ONYX_QUEUE_GRAPHICS_TYPE);
     memory = memory_;
 
-    initAttachments(fbs[0].width, fbs[0].height);
+    uint32_t width, height;
+    VkFormat format;
+    width = onyx_get_swapchain_width(swapchain);
+    height = onyx_get_swapchain_height(swapchain);
+    format = onyx_get_swapchain_format(swapchain);
+
+    initAttachments(width, height);
     hell_print(">> Woad: attachments initialized. \n");
     initGbufRenderPass();
     onyx_create_render_pass_color(device, VK_IMAGE_LAYOUT_UNDEFINED,
                                 finalColorLayout, VK_ATTACHMENT_LOAD_OP_CLEAR,
-                                fbs[0].format, &deferredRenderPass);
+                                format, &deferredRenderPass);
     hell_print(">> Woad: renderpasses initialized. \n");
-    initGbufferFramebuffer(fbs[0].width, fbs[0].height);
-    for (int i = 0; i < fbCount; i++)
+    initGbufferFramebuffer(width, height);
+    for (int i = 0; i < 2; i++)
     {
-        initSwapFramebuffer(&fbs[i]);
+        WoadFrame f = {
+            .dirty = true,
+            .format = format,
+            .width = width,
+            .height = height,
+            .index = i,
+            .view = onyx_get_swapchain_image_view(swapchain, i),
+        };
+        initSwapFramebuffer(&f);
     }
     hell_print(">> Woad: framebuffers initialized. \n");
     initDescriptorSetsAndPipelineLayouts();
@@ -1408,4 +1422,27 @@ woad_Cleanup(void)
     vkDestroyRenderPass(device, gbufferRenderPass, NULL);
     vkDestroyRenderPass(device, deferredRenderPass, NULL);
     vkDestroyPipelineLayout(device, pipelineLayout, NULL);
+}
+
+WoadFrame
+woad_Frame(const OnyxSwapchainImage *img)
+{
+    static int64_t last_img_uuid = -1;
+
+    const uint32_t idx = img->index;
+    int64_t cur_uuid = img->swapchain->image_uuid[idx];
+
+    bool dirty = last_img_uuid != cur_uuid;
+    last_img_uuid = cur_uuid;
+
+    WoadFrame f = {
+        .dirty = dirty,
+        .format = onyx_get_swapchain_format(img->swapchain),
+        .width = onyx_get_swapchain_width(img->swapchain),
+        .height = onyx_get_swapchain_height(img->swapchain),
+        .index = img->index,
+        .view = onyx_get_swapchain_image_view(img->swapchain, idx),
+    };
+
+    return f;
 }
