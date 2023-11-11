@@ -214,7 +214,7 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
 
     VkQueue queue = onyx_get_graphics_queue(instance, 0);
     VkFence fence;
-    onyx_create_fence(device, true, &fence);
+    onyx_create_fence(device, false, &fence);
     vkQueueSubmit(queue, 1, &si, fence);
     onyx_wait_for_fence(device, &fence);
 
@@ -586,7 +586,7 @@ initPipelines(bool openglStyle)
     };
 
 
-    int       err;
+    int       err = 0;
     ByteArray reg_vert_code, gbuffer_frag_code, tan_vert_code,
         tan_gbuffer_frag_code, pos_vert_code, gbuffer_pos_code, full_screen_vert_code, deferred_code;
 
@@ -594,8 +594,8 @@ initPipelines(bool openglStyle)
     err |= hell_read_file(WOAD_SPV_PREFIX "/gbuffer.frag.spv", &gbuffer_frag_code);
     err |= hell_read_file(WOAD_SPV_PREFIX "/tangent.vert.spv", &tan_vert_code);
     err |= hell_read_file(WOAD_SPV_PREFIX "/gbuffertan.frag.spv", &tan_gbuffer_frag_code);
-    err |= hell_read_file(WOAD_SPV_PREFIX "/pos.vert.spv", &tan_gbuffer_frag_code);
-    err |= hell_read_file(WOAD_SPV_PREFIX "/gbufferpos.frag.spv", &tan_gbuffer_frag_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/pos.vert.spv", &pos_vert_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/gbufferpos.frag.spv", &gbuffer_pos_code);
     err |= hell_read_file(ONYX_SPV_PREFIX "/full-screen.vert.spv", &full_screen_vert_code);
     err |= hell_read_file(WOAD_SPV_PREFIX "/deferred.frag.spv", &deferred_code);
 
@@ -654,6 +654,18 @@ initPipelines(bool openglStyle)
             .entry_point = "main",
     }};
 
+    OnyxPipelineColorBlendAttachment no_blend = {
+        .blend_enable = false,
+        .blend_mode = ONYX_BLEND_MODE_OVER,
+    };
+
+    OnyxPipelineColorBlendAttachment attachment_blends[4] = {
+        no_blend,
+        no_blend,
+        no_blend,
+        no_blend,
+    };
+
     const OnyxGraphicsPipelineInfo gPipelineInfos[] = {
         (OnyxGraphicsPipelineInfo){
             .render_pass                      = gbufferRenderPass,
@@ -662,6 +674,8 @@ initPipelines(bool openglStyle)
             .rasterization_samples            = VK_SAMPLE_COUNT_1_BIT,
             .front_face                       = frontface,
             .attachment_count                 = 4,
+            .attachment_blends                = attachment_blends,
+            .line_width                       = 1.0,
             .vertex_binding_description_count = LEN(b),
             .vertex_binding_descriptions      = b,
             .vertex_attribute_description_count = LEN(a),
@@ -677,7 +691,9 @@ initPipelines(bool openglStyle)
             .layout                = pipelineLayout,
             .rasterization_samples = VK_SAMPLE_COUNT_1_BIT,
             .front_face            = frontface,
+            .line_width                       = 1.0,
             .attachment_count      = 4,
+            .attachment_blends                = attachment_blends,
             .dynamic_state_count   = LEN(dynamicStates),
             .dynamic_states        = dynamicStates,
             .vertex_binding_description_count = LEN(tan_b),
@@ -692,8 +708,10 @@ initPipelines(bool openglStyle)
             .topology                         = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
             .layout                           = pipelineLayout,
             .rasterization_samples            = VK_SAMPLE_COUNT_1_BIT,
+            .line_width                       = 1.0,
             .front_face                       = frontface,
             .attachment_count                 = 4,
+            .attachment_blends                = attachment_blends,
             .dynamic_state_count              = LEN(dynamicStates),
             .dynamic_states                   = dynamicStates,
             .vertex_binding_description_count = LEN(b),
@@ -710,10 +728,13 @@ initPipelines(bool openglStyle)
         .layout            = pipelineLayout,
         .rasterization_samples = VK_SAMPLE_COUNT_1_BIT,
         .front_face = VK_FRONT_FACE_CLOCKWISE,
+        .attachment_count = 1,
+        .attachment_blends = attachment_blends,
         .dynamic_state_count = LEN(dynamicStates),
         .dynamic_states = dynamicStates,
         .shader_stage_count = LEN(shader_stages_deferred),
         .shader_stages = shader_stages_deferred,
+            .line_width                       = 1.0,
     };
 
     const OnyxRayTracePipelineInfo rtPipelineInfo = {

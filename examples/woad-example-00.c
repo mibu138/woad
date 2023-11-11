@@ -15,7 +15,6 @@ OnyxGeometry geo;
 OnyxCommandPool cmdpool;
 
 VkFence     fences[2];
-VkSemaphore img_acq_semas[2];
 VkSemaphore rendered_semas[2];
 
 HellWindow *window;
@@ -72,7 +71,7 @@ frame(i64 fi, i64 dt)
     onyx_end_command_buffer(cmdbuf);
 
     VkSubmitInfo si = onyx_submit_info(
-        1, &img_acq_semas[f],
+        1, &swap_img.swapchain->image_acquired[swap_img.semaphore_index],
         &(VkPipelineStageFlags){VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT}, 1, &cmdbuf,
         1, &rendered_semas[f]);
 
@@ -124,7 +123,6 @@ main(int argc, char* argv[])
         VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, 2);
 
     onyx_create_fences(orb.device, true, 2, fences);
-    onyx_create_semaphores(orb.device, 2, img_acq_semas);
     onyx_create_semaphores(orb.device, 2, rendered_semas);
 
     hell_subscribe(hm.eventqueue, HELL_EVENT_MASK_POINTER_BIT,
@@ -136,6 +134,7 @@ main(int argc, char* argv[])
         frame(hm.frame_count, hm.frame_delta);
         hell_end_frame(&hm);
         usleep(5000);
+        //if (hm.frame_count > 0) hell_exit(0);
     }
     hell_close_hellmouth(&hm);
     return 0;
