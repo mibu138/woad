@@ -1,0 +1,3 @@
+[submodule "pome"]
+	path = pome
+	url = michael@fenrir:~/git/pome.git
