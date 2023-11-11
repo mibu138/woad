@@ -13,6 +13,7 @@ typedef enum {
 
 typedef struct WoadFrame {
     VkImageView view;
+    VkFormat    format;
     uint32_t    width;
     uint32_t    height;
     bool        dirty;

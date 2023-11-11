@@ -6,6 +6,7 @@
 #include <coal/coal.h>
 #include <hell/hell.h>
 #include <hell/len.h>
+#include <hell/io.h>
 #include <memory.h>
 #include <onyx/attribute.h>
 #include <stdint.h>
@@ -19,6 +20,9 @@ typedef OnyxMaterial              Material;
 typedef OnyxBuffer                BufferRegion;
 typedef OnyxAccelerationStructure AccelerationStructure;
 typedef OnyxPrimitive             Prim;
+
+#define WOAD_SPV_PREFIX "build/shaders/woad_shaders"
+#define ONYX_SPV_PREFIX "build/pome/src/onyx/shaders/onyx_shaders"
 
 // quick hack
 #define ONYX_S_MAX_MATERIALS 10
@@ -210,7 +214,7 @@ initAttachments(uint32_t windowWidth, uint32_t windowHeight)
 
     VkQueue queue = onyx_get_graphics_queue(instance, 0);
     VkFence fence;
-    onyx_create_fence(device, &fence);
+    onyx_create_fence(device, true, &fence);
     vkQueueSubmit(queue, 1, &si, fence);
     onyx_wait_for_fence(device, &fence);
 
@@ -481,8 +485,8 @@ initDescriptorSetsAndPipelineLayouts(void)
 
     onyx_create_descriptor_pool(device, pool_parms, &descriptorPool);
 
-    onyx_allocate_descriptor_sets(device, descriptorPool, DESC_SET_COUNT, descriptorSetLayouts, &descriptorSets[0]);
-    onyx_allocate_descriptor_sets(device, descriptorPool, DESC_SET_COUNT, descriptorSetLayouts, &descriptorSets[1]);
+    onyx_allocate_descriptor_sets(device, descriptorPool, DESC_SET_COUNT, descriptorSetLayouts, descriptorSets[0]);
+    onyx_allocate_descriptor_sets(device, descriptorPool, DESC_SET_COUNT, descriptorSetLayouts, descriptorSets[1]);
 
     const VkPushConstantRange pcPrimId = {
         .offset = 0,
@@ -562,79 +566,173 @@ initPipelines(bool openglStyle)
     VkVertexInputAttributeDescription a[] = {
         { .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .location = 0, .offset = 0 },
         { .binding = 1, .format = VK_FORMAT_R32G32B32_SFLOAT, .location = 1, .offset = 0 },
-        { .binding = 2, .format = VK_FORMAT_R32G32B32_SFLOAT, .location = 2, .offset = 0 },
+        { .binding = 2, .format = VK_FORMAT_R32G32_SFLOAT, .location = 2, .offset = 0 },
     };
 
+    VkVertexInputBindingDescription tan_b[] = {
+        { .binding = 0, .stride = tanAttrSizes[0], .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+        { .binding = 1, .stride = tanAttrSizes[1], .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+        { .binding = 2, .stride = tanAttrSizes[2], .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+        { .binding = 3, .stride = tanAttrSizes[3], .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+        { .binding = 4, .stride = tanAttrSizes[4], .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
+    };
+
+    VkVertexInputAttributeDescription tan_a[] = {
+        { .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .location = 0, .offset = 0 },
+        { .binding = 1, .format = VK_FORMAT_R32G32B32_SFLOAT, .location = 1, .offset = 0 },
+        { .binding = 2, .format = VK_FORMAT_R32G32B32_SFLOAT, .location = 2, .offset = 0 },
+        { .binding = 3, .format = VK_FORMAT_R32_SFLOAT, .location = 3, .offset = 0 },
+        { .binding = 4, .format = VK_FORMAT_R32G32_SFLOAT, .location = 4, .offset = 0 },
+    };
+
+
+    int       err;
+    ByteArray reg_vert_code, gbuffer_frag_code, tan_vert_code,
+        tan_gbuffer_frag_code, pos_vert_code, gbuffer_pos_code, full_screen_vert_code, deferred_code;
+
+    err |= hell_read_file(WOAD_SPV_PREFIX "/regular.vert.spv", &reg_vert_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/gbuffer.frag.spv", &gbuffer_frag_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/tangent.vert.spv", &tan_vert_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/gbuffertan.frag.spv", &tan_gbuffer_frag_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/pos.vert.spv", &tan_gbuffer_frag_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/gbufferpos.frag.spv", &tan_gbuffer_frag_code);
+    err |= hell_read_file(ONYX_SPV_PREFIX "/full-screen.vert.spv", &full_screen_vert_code);
+    err |= hell_read_file(WOAD_SPV_PREFIX "/deferred.frag.spv", &deferred_code);
+
+    if (err)
+        fatal_error("Error reading spv files.");
+
+    OnyxShaderInfo shader_stages_reg[] = {
+         {
+            .byte_count = reg_vert_code.count,
+            .code = (void*)reg_vert_code.elems,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .entry_point = "main",
+        },{
+            .byte_count = gbuffer_frag_code.count,
+            .code =(void*) gbuffer_frag_code.elems,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .entry_point = "main",
+    }};
+
+    OnyxShaderInfo shader_stages_tan[] = {
+         {
+            .byte_count = tan_vert_code.count,
+            .code =(void*) tan_vert_code.elems,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .entry_point = "main",
+        },{
+            .byte_count = tan_gbuffer_frag_code.count,
+            .code =(void*) tan_gbuffer_frag_code.elems,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .entry_point = "main",
+    }};
+
+    OnyxShaderInfo shader_stages_pos[] = {
+         {
+            .byte_count = pos_vert_code.count,
+            .code =(void*) pos_vert_code.elems,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .entry_point = "main",
+        },{
+            .byte_count = gbuffer_pos_code.count,
+            .code =(void*) gbuffer_pos_code.elems,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .entry_point = "main",
+    }};
+
+    OnyxShaderInfo shader_stages_deferred[] = {
+         {
+            .byte_count = full_screen_vert_code.count,
+            .code =(void*) full_screen_vert_code.elems,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .entry_point = "main",
+        },{
+            .byte_count = deferred_code.count,
+            .code =(void*) deferred_code.elems,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .entry_point = "main",
+    }};
+
     const OnyxGraphicsPipelineInfo gPipelineInfos[] = {
-        {
-            .render_pass        = gbufferRenderPass,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            .layout            = pipelineLayout,
-            .rasterization_samples = VK_SAMPLE_COUNT_1_BIT,
-            .front_face         = frontface,
-            .attachment_count   = 4,
-            .vertex_binding_description_count = 3,
-            .vertex_binding_descriptions = b,
-            .vertex_attribute_description_count = 3,
-            .vertex_attribute_descriptions = a,
-            .dynamic_state_count = LEN(dynamicStates),
-            .dynamic_states = dynamicStates,
-            .vertshader        = "woad/regular.vert.spv",
-            .fragShader        = "woad/gbuffer.frag.spv",
+        (OnyxGraphicsPipelineInfo){
+            .render_pass                      = gbufferRenderPass,
+            .topology                         = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .layout                           = pipelineLayout,
+            .rasterization_samples            = VK_SAMPLE_COUNT_1_BIT,
+            .front_face                       = frontface,
+            .attachment_count                 = 4,
+            .vertex_binding_description_count = LEN(b),
+            .vertex_binding_descriptions      = b,
+            .vertex_attribute_description_count = LEN(a),
+            .vertex_attribute_descriptions      = a,
+            .dynamic_state_count                = LEN(dynamicStates),
+            .dynamic_states                     = dynamicStates,
+            .shader_stage_count                 = LEN(shader_stages_reg),
+            .shader_stages                      = shader_stages_reg,
         },
-        {.renderPass        = gbufferRenderPass,
-         .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-         .layout            = pipelineLayout,
-         .sampleCount       = VK_SAMPLE_COUNT_1_BIT,
-         .frontFace         = frontface,
-         .attachmentCount   = 4,
-         .dynamicStateCount = LEN(dynamicStates),
-         .pDynamicStates    = dynamicStates,
-         .vertexDescription = obdn_GetVertexDescription(5, tanAttrSizes),
-         .vertShader        = "woad/tangent.vert.spv",
-         .fragShader        = "woad/gbuffertan.frag.spv"},
-        {.renderPass        = gbufferRenderPass,
-         .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-         .layout            = pipelineLayout,
-         .sampleCount       = VK_SAMPLE_COUNT_1_BIT,
-         .frontFace         = frontface,
-         .attachmentCount   = 4,
-         .dynamicStateCount = LEN(dynamicStates),
-         .pDynamicStates    = dynamicStates,
-         .vertexDescription =
-             obdn_GetVertexDescription(LEN(posAttrSizes), posAttrSizes),
-         .pFragSpecializationInfo = &fragSpecInfo,
-         .vertShader              = "woad/pos.vert.spv",
-         .fragShader              = "woad/gbufferpos.frag.spv"}};
+        (OnyxGraphicsPipelineInfo){
+            .render_pass           = gbufferRenderPass,
+            .topology              = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .layout                = pipelineLayout,
+            .rasterization_samples = VK_SAMPLE_COUNT_1_BIT,
+            .front_face            = frontface,
+            .attachment_count      = 4,
+            .dynamic_state_count   = LEN(dynamicStates),
+            .dynamic_states        = dynamicStates,
+            .vertex_binding_description_count = LEN(tan_b),
+            .vertex_binding_descriptions      = tan_b,
+            .vertex_attribute_description_count = LEN(tan_a),
+            .vertex_attribute_descriptions      = tan_a,
+            .shader_stage_count    = LEN(shader_stages_tan),
+            .shader_stages         = shader_stages_tan,
+        },
+        (OnyxGraphicsPipelineInfo){
+            .render_pass                      = gbufferRenderPass,
+            .topology                         = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .layout                           = pipelineLayout,
+            .rasterization_samples            = VK_SAMPLE_COUNT_1_BIT,
+            .front_face                       = frontface,
+            .attachment_count                 = 4,
+            .dynamic_state_count              = LEN(dynamicStates),
+            .dynamic_states                   = dynamicStates,
+            .vertex_binding_description_count = LEN(b),
+            .vertex_binding_descriptions      = b,
+            .vertex_attribute_description_count = LEN(a),
+            .vertex_attribute_descriptions      = a,
+            .shader_stage_count                 = LEN(shader_stages_pos),
+            .shader_stages                      = shader_stages_pos,
+        }};
 
     const OnyxGraphicsPipelineInfo defferedPipeInfo = {
-        .renderPass        = deferredRenderPass,
-        .primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .render_pass = deferredRenderPass,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .layout            = pipelineLayout,
-        .sampleCount       = VK_SAMPLE_COUNT_1_BIT,
-        .frontFace         = VK_FRONT_FACE_CLOCKWISE,
-        .dynamicStateCount = LEN(dynamicStates),
-        .pDynamicStates    = dynamicStates,
-        .vertShader        = ONYX_FULL_SCREEN_VERT_SPV,
-        .fragShader        = "woad/deferred.frag.spv"};
+        .rasterization_samples = VK_SAMPLE_COUNT_1_BIT,
+        .front_face = VK_FRONT_FACE_CLOCKWISE,
+        .dynamic_state_count = LEN(dynamicStates),
+        .dynamic_states = dynamicStates,
+        .shader_stage_count = LEN(shader_stages_deferred),
+        .shader_stages = shader_stages_deferred,
+    };
 
     const OnyxRayTracePipelineInfo rtPipelineInfo = {
         .layout        = pipelineLayout,
-        .raygenCount   = 1,
-        .raygenShaders = (char*[]){"woad/shadow.rgen.spv"},
-        .missCount     = 1,
-        .missShaders   = (char*[]){"woad/shadow.rmiss.spv"},
-        .chitCount     = 1,
-        .chitShaders   = (char*[]){"woad/shadow.rchit.spv"}};
+        .raygen_count    = 1,
+        .raygen_shaders = (char*[]){WOAD_SPV_PREFIX "/shadow.rgen.spv"},
+        .miss_count      = 1,
+        .miss_shaders = (char*[]){WOAD_SPV_PREFIX "/shadow.rmiss.spv"},
+        .chit_count = 1,
+        .chit_shaders = (char*[]){WOAD_SPV_PREFIX "/shadow.rchit.spv"}};
 
     assert(LEN(gPipelineInfos) == GBUFFER_PIPELINE_COUNT);
 
-    obdn_CreateGraphicsPipelines(device, LEN(gPipelineInfos), gPipelineInfos,
+    onyx_create_graphics_pipelines(device, LEN(gPipelineInfos), gPipelineInfos,
                                  gbufferPipelines);
-    obdn_CreateGraphicsPipelines(device, 1, &defferedPipeInfo,
+    onyx_create_graphics_pipelines(device, 1, &defferedPipeInfo,
                                  &defferedPipeline);
     if (!raytracing_disabled)
-        obdn_CreateRayTracePipelines(device, memory, 1, &rtPipelineInfo,
+        onyx_create_ray_trace_pipelines(device, memory, 1, &rtPipelineInfo,
                                      &raytracePipeline, &shaderBindingTable);
 }
 
@@ -671,35 +769,35 @@ updateGbufferDescriptors(void)
         VkWriteDescriptorSet writes[] = {
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet     = descriptions[i].descriptorSets[DESC_SET_DEFERRED],
+             .dstSet     = descriptorSets[i][DESC_SET_DEFERRED],
              .dstBinding = 0,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
              .pImageInfo      = &worldPInfo},
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet     = descriptions[i].descriptorSets[DESC_SET_DEFERRED],
+             .dstSet     = descriptorSets[i][DESC_SET_DEFERRED],
              .dstBinding = 1,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
              .pImageInfo      = &normalInfo},
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet     = descriptions[i].descriptorSets[DESC_SET_DEFERRED],
+             .dstSet     = descriptorSets[i][DESC_SET_DEFERRED],
              .dstBinding = 2,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
              .pImageInfo      = &albedoInfo},
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet     = descriptions[i].descriptorSets[DESC_SET_DEFERRED],
+             .dstSet     = descriptorSets[i][DESC_SET_DEFERRED],
              .dstBinding = 3,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
              .pImageInfo      = &shadowInfo},
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet     = descriptions[i].descriptorSets[DESC_SET_DEFERRED],
+             .dstSet     = descriptorSets[i][DESC_SET_DEFERRED],
              .dstBinding = 4,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -723,7 +821,7 @@ updateASDescriptors(void)
         VkWriteDescriptorSet writeDS = {
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstArrayElement = 0,
-            .dstSet     = descriptions[i].descriptorSets[DESC_SET_DEFERRED],
+            .dstSet     = descriptorSets[i][DESC_SET_DEFERRED],
             .dstBinding = 5,
             .descriptorCount = 1,
             .descriptorType  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
@@ -739,21 +837,21 @@ updateDescriptors(void)
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         // camera creation
-        cameraBuffers[i] = obdn_RequestBufferRegion(
+        cameraBuffers[i] = onyx_request_buffer_region(
             memory, sizeof(Camera), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             ONYX_MEMORY_HOST_GRAPHICS_TYPE);
 
         // xforms creation
-        xformsBuffers[i] = obdn_RequestBufferRegion(
+        xformsBuffers[i] = onyx_request_buffer_region(
             memory, sizeof(Xforms), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             ONYX_MEMORY_HOST_GRAPHICS_TYPE);
 
         // lights creation
-        lightsBuffers[i] = obdn_RequestBufferRegion(
+        lightsBuffers[i] = onyx_request_buffer_region(
             memory, sizeof(Lights), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             ONYX_MEMORY_HOST_GRAPHICS_TYPE);
 
-        materialsBuffers[i] = obdn_RequestBufferRegion(
+        materialsBuffers[i] = onyx_request_buffer_region(
             memory, sizeof(Material) * ONYX_S_MAX_MATERIALS,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ONYX_MEMORY_HOST_GRAPHICS_TYPE);
 
@@ -777,28 +875,28 @@ updateDescriptors(void)
         VkWriteDescriptorSet writes[] = {
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet          = descriptions[i].descriptorSets[DESC_SET_MAIN],
+             .dstSet          = descriptorSets[i][DESC_SET_MAIN],
              .dstBinding      = 0,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
              .pBufferInfo     = &camInfo},
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet          = descriptions[i].descriptorSets[DESC_SET_MAIN],
+             .dstSet          = descriptorSets[i][DESC_SET_MAIN],
              .dstBinding      = 1,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
              .pBufferInfo     = &xformInfo},
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet          = descriptions[i].descriptorSets[DESC_SET_MAIN],
+             .dstSet          = descriptorSets[i][DESC_SET_MAIN],
              .dstBinding      = 2,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
              .pBufferInfo     = &lightInfo},
             {.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .dstArrayElement = 0,
-             .dstSet          = descriptions[i].descriptorSets[DESC_SET_MAIN],
+             .dstSet          = descriptorSets[i][DESC_SET_MAIN],
              .dstBinding      = 4,
              .descriptorCount = 1,
              .descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -822,7 +920,7 @@ updateTexture(const uint32_t frameIndex, const OnyxImage* img,
     VkWriteDescriptorSet write = {
         .sType      = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .pNext      = NULL,
-        .dstSet     = descriptions[frameIndex].descriptorSets[DESC_SET_MAIN],
+        .dstSet     = descriptorSets[frameIndex][DESC_SET_MAIN],
         .dstBinding = 3,
         .dstArrayElement = texId,
         .descriptorCount = 1,
@@ -862,12 +960,12 @@ generateGBuffer(VkCommandBuffer cmdBuf, const OnyxScene* scene,
                           gbufferPipelines[pipeId]);
         uint32_t                    primCount;
         const OnyxPrimitiveHandle* prim_handles =
-            obdn_GetPrimlistPrims(&pipelinePrimLists[pipeId], &primCount);
+            onyx_get_primlist_prims(&pipelinePrimLists[pipeId], &primCount);
         for (int i = 0; i < primCount; i++)
         {
             OnyxPrimitiveHandle  prim_handle = prim_handles[i];
             const OnyxPrimitive* prim =
-                obdn_SceneGetPrimitiveConst(scene, prim_handle);
+                onyx_scene_get_primitive_const(scene, prim_handle);
             OnyxMaterialHandle matId = prim->material;
             OnyxXform          xform = prim->xform;
             vkCmdPushConstants(cmdBuf, pipelineLayout,
@@ -879,7 +977,7 @@ generateGBuffer(VkCommandBuffer cmdBuf, const OnyxScene* scene,
             vkCmdPushConstants(
                 cmdBuf, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
                 sizeof(Mat4) + sizeof(uint32_t), sizeof(uint32_t), &matId);
-            obdn_DrawGeo(cmdBuf, prim->geo);
+            onyx_draw_geo(cmdBuf, prim->geo, 1);
         }
     }
 
@@ -894,8 +992,8 @@ shadowPass(VkCommandBuffer cmdBuf, const uint32_t frameIndex,
                       raytracePipeline);
 
     vkCmdTraceRaysKHR(
-        cmdBuf, &shaderBindingTable.raygenTable, &shaderBindingTable.missTable,
-        &shaderBindingTable.hitTable, &shaderBindingTable.callableTable,
+        cmdBuf, &shaderBindingTable.raygen_table, &shaderBindingTable.miss_table,
+        &shaderBindingTable.hit_table, &shaderBindingTable.callable_table,
         windowWidth, windowHeight, 1);
 }
 
@@ -928,41 +1026,41 @@ sortPipelinePrims(const OnyxScene* scene)
 {
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)
     {
-        obdn_ClearPrimList(&pipelinePrimLists[i]);
+        onyx_clear_prim_list(&pipelinePrimLists[i]);
     }
     obint                       prim_count = 0;
     const OnyxPrimitiveHandle* prims =
-        obdn_SceneGetDirtyPrimitives(scene, &prim_count);
+        onyx_scene_get_dirty_primitives(scene, &prim_count);
     for (obint primId = 0; primId < prim_count; primId++)
     {
         AttrMask                   attrMask = 0;
         const OnyxPrimitiveHandle handle   = prims[primId];
-        const OnyxPrimitive* prim = obdn_SceneGetPrimitiveConst(scene, handle);
+        const OnyxPrimitive* prim = onyx_scene_get_primitive_const(scene, handle);
         if (prim->flags & ONYX_PRIM_INVISIBLE_BIT)
             continue;
         const OnyxGeometry* geo = prim->geo;
-        for (int i = 0; i < geo->attrCount; i++)
+        for (int i = 0; i < geo->templ.attribute_count; i++)
         {
-            const char* name = geo->attrNames[i];
-            if (strcmp(name, POS_NAME) == 0)
+            OnyxAttributeType name = geo->templ.attribute_types[i];
+            if (name == ONYX_ATTRIBUTE_TYPE_POS)
                 attrMask |= POS_BIT;
-            if (strcmp(name, NORMAL_NAME) == 0)
+            if (name == ONYX_ATTRIBUTE_TYPE_NORMAL)
                 attrMask |= NORMAL_BIT;
-            if (strcmp(name, UV_NAME) == 0)
+            if (name == ONYX_ATTRIBUTE_TYPE_UV)
                 attrMask |= UV_BIT;
-            if (strcmp(name, TANGENT_NAME) == 0)
+            if (name == ONYX_ATTRIBUTE_TYPE_TANGENT)
                 attrMask |= TAN_BIT;
-            if (strcmp(name, SIGN_NAME) == 0)
+            if (name == ONYX_ATTRIBUTE_TYPE_SIGN)
                 attrMask |= SIGN_BIT;
         }
         if (attrMask == POS_NOR_UV_TAN_MASK)
-            obdn_AddPrimToList(
+            onyx_add_prim_to_list(
                 handle, &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV_TAN]);
         else if (attrMask == POS_NOR_UV_MASK)
-            obdn_AddPrimToList(handle,
+            onyx_add_prim_to_list(handle,
                                &pipelinePrimLists[PIPELINE_GBUFFER_POS_NOR_UV]);
         else if (attrMask == POS_MASK)
-            obdn_AddPrimToList(handle,
+            onyx_add_prim_to_list(handle,
                                &pipelinePrimLists[PIPELINE_GBUFFER_POS]);
         else
         {
@@ -988,19 +1086,19 @@ sortPipelinePrims(const OnyxScene* scene)
 
 static void
 updateRenderCommands(VkCommandBuffer cmdBuf, const OnyxScene* scene,
-                     const OnyxFrame* frame, uint32_t region_x,
+                     const WoadFrame* frame, uint32_t region_x,
                      uint32_t region_y, uint32_t region_width,
                      uint32_t region_height)
 {
     uint32_t frameIndex = frame->index;
-    obdn_CmdSetViewportScissor(cmdBuf, region_x, region_y, region_width,
+    onyx_cmd_set_viewport_scissor(cmdBuf, region_x, region_y, region_width,
                                region_height);
 
     vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 2,
-                            descriptions[frameIndex].descriptorSets, 0, NULL);
+                            descriptorSets[frameIndex], 0, NULL);
 
-    uint32_t light_count = obdn_SceneGetLightCount(scene);
+    uint32_t light_count = onyx_scene_get_light_count(scene);
     vkCmdPushConstants(
         cmdBuf, pipelineLayout,
         VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR,
@@ -1010,7 +1108,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const OnyxScene* scene,
     // all previous commands have completed fragment shader reads.
     // we could potentially be more fine-grained by using a VkEvent
     // to wait specifically for that exact read to happen.
-    obdn_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    onyx_v_MemoryBarrier(cmdBuf, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                          VK_DEPENDENCY_BY_REGION_BIT, VK_ACCESS_SHADER_READ_BIT,
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
@@ -1022,18 +1120,18 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const OnyxScene* scene,
     }
     else
     {
-        obdn_v_MemoryBarrier(
+        onyx_v_MemoryBarrier(
             cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0,
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
         vkCmdBindDescriptorSets(
             cmdBuf, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelineLayout, 0,
-            2, descriptions[frameIndex].descriptorSets, 0, NULL);
+            2, descriptorSets[frameIndex], 0, NULL);
 
         shadowPass(cmdBuf, frameIndex, region_width, region_height);
 
-        obdn_v_MemoryBarrier(
+        onyx_v_MemoryBarrier(
             cmdBuf, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
             VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -1041,7 +1139,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const OnyxScene* scene,
 
     vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 2,
-                            descriptions[frameIndex].descriptorSets, 0, NULL);
+                            descriptorSets[frameIndex], 0, NULL);
 
     // viewport.height = windowHeight;
     // viewport.y = 0;
@@ -1054,20 +1152,20 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const OnyxScene* scene,
 static void
 freeImages(void)
 {
-    obdn_FreeImage(&renderTargetDepth);
-    obdn_FreeImage(&imageWorldP);
-    obdn_FreeImage(&imageNormal);
-    obdn_FreeImage(&imageShadow);
-    obdn_FreeImage(&imageRoughness);
-    obdn_FreeImage(&imageAlbedo);
+    onyx_free_image(&renderTargetDepth);
+    onyx_free_image(&imageWorldP);
+    onyx_free_image(&imageNormal);
+    onyx_free_image(&imageShadow);
+    onyx_free_image(&imageRoughness);
+    onyx_free_image(&imageAlbedo);
 }
 
 static void
-onDirtyFrame(const OnyxFrame* fb)
+onDirtyFrame(const WoadFrame *fb)
 {
     static uint32_t last_width = 0, last_height = 0;
 
-    obdn_DestroyFramebuffer(device, swapImageBuffer[fb->index]);
+    onyx_destroy_framebuffer(device, swapImageBuffer[fb->index]);
     initSwapFramebuffer(fb);
 
     if (fb->width != last_width || fb->height != last_height)
@@ -1075,7 +1173,7 @@ onDirtyFrame(const OnyxFrame* fb)
         vkDeviceWaitIdle(device);
         freeImages();
         initAttachments(fb->width, fb->height);
-        obdn_DestroyFramebuffer(device, gframebuffer);
+        onyx_destroy_framebuffer(device, gframebuffer);
         initGbufferFramebuffer(fb->width, fb->height);
         updateGbufferDescriptors();
     }
@@ -1084,21 +1182,21 @@ onDirtyFrame(const OnyxFrame* fb)
 static void
 updateCamera(const OnyxScene* scene, uint32_t index)
 {
-    Camera* uboCam = (Camera*)cameraBuffers[index].hostData;
-    uboCam->view   = obdn_SceneGetCameraView(scene);
-    uboCam->proj   = obdn_SceneGetCameraProjection(scene);
+    Camera* uboCam = (Camera*)cameraBuffers[index].host_data;
+    uboCam->view   = onyx_scene_get_camera_view(scene);
+    uboCam->proj   = onyx_scene_get_camera_projection(scene);
     // printf("Proj:\n");
     // coal_PrintMat4(&proj);
     // printf("View:\n");
     // coal_PrintMat4(&view);
-    uboCam->camera = obdn_SceneGetCameraXform(scene);
+    uboCam->camera = onyx_scene_get_camera_xform(scene);
 }
 
 static void
 updateFastXforms(uint32_t frameIndex, uint32_t primIndex)
 {
     assert(primIndex < 16);
-    Xforms* xforms = (Xforms*)xformsBuffers[frameIndex].hostData;
+    Xforms* xforms = (Xforms*)xformsBuffers[frameIndex].host_data;
     // coal_Copy_Mat4(scene->xforms[primIndex], xforms->xform[primIndex].x);
 }
 
@@ -1113,45 +1211,45 @@ updateMaterials(const OnyxScene* scene, uint32_t frameIndex)
     _Static_assert(sizeof(OnyxMaterial) == 4 * 8,
                    "Check shader material against OnyxMaterial\n");
     obint                matcount  = 0;
-    const OnyxMaterial* materials = obdn_SceneGetMaterials(scene, &matcount);
-    memcpy(materialsBuffers[frameIndex].hostData, materials,
+    const OnyxMaterial* materials = onyx_scene_get_materials(scene, &matcount);
+    memcpy(materialsBuffers[frameIndex].host_data, materials,
            sizeof(Material) * matcount);
 }
 
 static void
 buildAccelerationStructures(const OnyxScene* scene)
 {
-    Hell_Array xforms;
-    hell_CreateArray(8, sizeof(Coal_Mat4), NULL, NULL, &xforms);
+    HellArray xforms;
+    hell_create_array_old(8, sizeof(CoalMat4), NULL, NULL, &xforms);
     obint                  prim_count = 0;
-    const OnyxPrimitive*  prims = obdn_SceneGetPrimitives(scene, &prim_count);
+    const OnyxPrimitive*  prims = onyx_scene_get_primitives(scene, &prim_count);
     AccelerationStructure* blasses = blas_array.elems;
     for (int i = 0; i < blas_array.count; i++)
     {
         AccelerationStructure* blas = &blasses[i];
-        obdn_DestroyAccelerationStruct(device, blas);
+        onyx_destroy_acceleration_struct(device, blas);
     }
-    if (tlas.bufferRegion.size != 0)
-        obdn_DestroyAccelerationStruct(device, &tlas);
-    hell_ArrayClear(&blas_array);
+    if (tlas.buffer_region.size != 0)
+        onyx_destroy_acceleration_struct(device, &tlas);
+    hell_array_clear(&blas_array);
     if (prim_count > 0)
     {
         for (int i = 0; i < prim_count; i++)
         {
             AccelerationStructure blas = {};
-            obdn_BuildBlas(memory, prims[i].geo, &blas);
-            hell_ArrayPush(&blas_array, &blas);
-            hell_ArrayPush(&xforms, &prims[i].xform);
+            onyx_build_blas(memory, prims[i].geo, &blas);
+            hell_array_push(&blas_array, &blas);
+            hell_array_push(&xforms, &prims[i].xform);
         }
-        obdn_BuildTlas(memory, prim_count, blas_array.elems, xforms.elems,
+        onyx_build_tlas(memory, prim_count, blas_array.elems, xforms.elems,
                        &tlas);
     }
-    hell_DestroyArray(&xforms, NULL);
+    hell_destroy_array(&xforms, NULL);
     printf(">>>>> Built acceleration structures\n");
 }
 
 void
-woad_Render(const OnyxScene* scene, const OnyxFrame* fb, uint32_t x,
+woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
             uint32_t y, uint32_t width, uint32_t height, VkCommandBuffer cmdbuf)
 {
     // assert(x + width  <= fb->width);
@@ -1163,7 +1261,7 @@ woad_Render(const OnyxScene* scene, const OnyxFrame* fb, uint32_t x,
     static uint8_t materialsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
 
     int                  frameIndex = fb->index;
-    OnyxSceneDirtyFlags scene_dirt = obdn_SceneGetDirt(scene);
+    OnyxSceneDirtyFlags scene_dirt = onyx_scene_get_dirt(scene);
     if (scene_dirt)
     {
         if (scene_dirt & ONYX_SCENE_CAMERA_VIEW_BIT)
@@ -1207,12 +1305,12 @@ woad_Render(const OnyxScene* scene, const OnyxFrame* fb, uint32_t x,
     if (lightsNeedUpdate)
     {
         obint       light_count;
-        OnyxLight* scene_lights = obdn_SceneGetLights(scene, &light_count);
-        Lights*     lights       = (Lights*)lightsBuffers[frameIndex].hostData;
+        OnyxLight* scene_lights = onyx_scene_get_lights(scene, &light_count);
+        Lights*     lights       = (Lights*)lightsBuffers[frameIndex].host_data;
         memcpy(lights, scene_lights, sizeof(Light) * light_count);
         lightsNeedUpdate--;
         printf("Tanto: lights sync\n");
-        obdn_PrintLightInfo(scene);
+        onyx_print_light_info(scene);
     }
     if (materialsNeedUpdate)
     {
@@ -1223,11 +1321,11 @@ woad_Render(const OnyxScene* scene, const OnyxFrame* fb, uint32_t x,
     {
         printf("texturesNeedUpdate %d\n", texturesNeedUpdate);
         obint               tex_count = 0;
-        const OnyxTexture* tex = obdn_SceneGetTextures(scene, &tex_count);
+        const OnyxTexture* tex = onyx_scene_get_textures(scene, &tex_count);
         // remember, 1 is the first valid texture index
         for (int i = 0; i < tex_count; i++)
         {
-            updateTexture(frameIndex, tex[i].devImage, i);
+            updateTexture(frameIndex, tex[i].dev_image, i);
         }
         texturesNeedUpdate--;
     }
@@ -1238,45 +1336,45 @@ woad_Render(const OnyxScene* scene, const OnyxFrame* fb, uint32_t x,
 void
 woad_Init(const OnyxInstance* instance_, OnyxMemory* memory_,
           VkImageLayout finalColorLayout, VkImageLayout finalDepthLayout,
-          uint32_t fbCount, const OnyxFrame fbs[/*fbCount*/],
+          uint32_t fbCount, const WoadFrame fbs[/*fbCount*/],
           Woad_Settings_Flags flags)
 {
-    hell_Print("Creating Woad renderer...\n");
+    hell_print("Creating Woad renderer...\n");
     instance = instance_;
     if (flags & WOAD_SETTINGS_NO_RAYTRACE_BIT)
         raytracing_disabled = true;
     for (int i = 0; i < GBUFFER_PIPELINE_COUNT; i++)
     {
-        pipelinePrimLists[i] = obdn_CreatePrimList(8);
+        pipelinePrimLists[i] = onyx_create_prim_list(8);
     }
 
-    hell_CreateArray(4, sizeof(AccelerationStructure), NULL, NULL, &blas_array);
+    hell_create_array_old(4, sizeof(AccelerationStructure), NULL, NULL, &blas_array);
 
-    device = obdn_GetDevice(instance);
+    device = onyx_get_device(instance);
     graphic_queue_family_index =
-        obdn_GetQueueFamilyIndex(instance, ONYX_V_QUEUE_GRAPHICS_TYPE);
+        onyx_queue_family_index(instance, ONYX_QUEUE_GRAPHICS_TYPE);
     memory = memory_;
 
     initAttachments(fbs[0].width, fbs[0].height);
-    hell_Print(">> Woad: attachments initialized. \n");
+    hell_print(">> Woad: attachments initialized. \n");
     initGbufRenderPass();
-    obdn_CreateRenderPass_Color(device, VK_IMAGE_LAYOUT_UNDEFINED,
+    onyx_create_render_pass_color(device, VK_IMAGE_LAYOUT_UNDEFINED,
                                 finalColorLayout, VK_ATTACHMENT_LOAD_OP_CLEAR,
-                                fbs[0].aovs[0].format, &deferredRenderPass);
-    hell_Print(">> Woad: renderpasses initialized. \n");
+                                fbs[0].format, &deferredRenderPass);
+    hell_print(">> Woad: renderpasses initialized. \n");
     initGbufferFramebuffer(fbs[0].width, fbs[0].height);
     for (int i = 0; i < fbCount; i++)
     {
         initSwapFramebuffer(&fbs[i]);
     }
-    hell_Print(">> Woad: framebuffers initialized. \n");
+    hell_print(">> Woad: framebuffers initialized. \n");
     initDescriptorSetsAndPipelineLayouts();
-    hell_Print(">> Woad: descriptor sets and pipeline layouts initialized. \n");
+    hell_print(">> Woad: descriptor sets and pipeline layouts initialized. \n");
     updateDescriptors();
-    hell_Print(">> Woad: descriptors updated. \n");
+    hell_print(">> Woad: descriptors updated. \n");
     initPipelines(false);
-    hell_Print(">> Woad: pipelines initialized. \n");
-    hell_Print(">> Woad: initialization complete. \n");
+    hell_print(">> Woad: pipelines initialized. \n");
+    hell_print(">> Woad: initialization complete. \n");
 }
 
 void
@@ -1292,20 +1390,20 @@ woad_Cleanup(void)
     for (int i = 0; i < blas_array.count; i++)
     {
         AccelerationStructure* blas = &blasses[i];
-        if (blas->bufferRegion.size != 0)
-            obdn_DestroyAccelerationStruct(device, blas);
+        if (blas->buffer_region.size != 0)
+            onyx_destroy_acceleration_struct(device, blas);
     }
-    if (tlas.bufferRegion.size != 0)
-        obdn_DestroyAccelerationStruct(device, &tlas);
-    obdn_DestroyShaderBindingTable(&shaderBindingTable);
+    if (tlas.buffer_region.size != 0)
+        onyx_destroy_acceleration_struct(device, &tlas);
+    onyx_destroy_shader_binding_table(&shaderBindingTable);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        obdn_DestroyDescription(device, &descriptions[i]);
+        vkDestroyDescriptorPool(device, descriptorPool, NULL);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayouts[i], NULL);
-        obdn_FreeBufferRegion(&cameraBuffers[i]);
-        obdn_FreeBufferRegion(&xformsBuffers[i]);
-        obdn_FreeBufferRegion(&lightsBuffers[i]);
-        obdn_FreeBufferRegion(&materialsBuffers[i]);
+        onyx_free_buffer(&cameraBuffers[i]);
+        onyx_free_buffer(&xformsBuffers[i]);
+        onyx_free_buffer(&lightsBuffers[i]);
+        onyx_free_buffer(&materialsBuffers[i]);
     }
     vkDestroyRenderPass(device, gbufferRenderPass, NULL);
     vkDestroyRenderPass(device, deferredRenderPass, NULL);
