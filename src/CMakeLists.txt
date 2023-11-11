@@ -1,5 +1,5 @@
 add_library(woad woad.c)
-target_link_libraries(woad PUBLIC Obsidian::Obsidian)
+target_link_libraries(woad PUBLIC onyx)
 target_include_directories(
     woad
     PRIVATE   ../include/woad

@@ -5,20 +5,28 @@
 extern "C" {
 #endif
 
-#include <obsidian/obsidian.h>
+#include <onyx/onyx.h>
 
 typedef enum {
     WOAD_SETTINGS_NO_RAYTRACE_BIT = 1 << 1
 } Woad_Settings_Flags;
 
+typedef struct WoadFrame {
+    VkImageView view;
+    uint32_t    width;
+    uint32_t    height;
+    bool        dirty;
+    uint8_t     index;
+} WoadFrame;
+
 void
-woad_Init(const Obdn_Instance* instance, Obdn_Memory* memory,
+woad_Init(const OnyxInstance* instance, OnyxMemory* memory,
                   VkImageLayout finalColorLayout,
                   VkImageLayout finalDepthLayout, uint32_t fbCount,
-                  const Obdn_Frame fbs[/*fbCount*/],
+                  const WoadFrame fbs[/*fbCount*/],
                   Woad_Settings_Flags flags);
 void
-woad_Render(const Obdn_Scene* scene, const Obdn_Frame* fb, uint32_t x, uint32_t y, uint32_t width,
+woad_Render(const OnyxScene* scene, const WoadFrame *fb, uint32_t x, uint32_t y, uint32_t width,
                   uint32_t height, VkCommandBuffer cmdbuf);
 
 void

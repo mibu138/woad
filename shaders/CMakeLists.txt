@@ -1,7 +1,5 @@
-include(author_shaders)
-author_shaders(woad_shaders 
-    woad
-    Obsidian::glslc
+pome_add_shaders(
+    woad_shaders 
     SOURCES 
     debug-deferred.frag
     deferred.frag

@@ -1,24 +1,23 @@
 #define COAL_SIMPLE_TYPE_NAMES
 #include <coal/coal.h>
 #include <hell/hell.h>
-#include <obsidian/obsidian.h>
 #include <woad/woad.h>
 
-Hell_Hellmouth  hm;
-Obdn_Orb        orb;
-Obdn_Swapchain* swapchain;
+Hell hm;
+Onyx orb;
+OnyxSwapchain *swapchain;
 
-Obdn_Scene* scene;
-Obdn_Geometry geo;
+OnyxScene* scene;
+OnyxGeometry geo;
 
-Obdn_CommandPool cmdpool;
+OnyxCommandPool cmdpool;
 
 VkFence     fences[2];
 VkSemaphore img_acq_semas[2];
 VkSemaphore rendered_semas[2];
 
 bool
-handlePointerInput(const Hell_Event* event, void* data)
+handlePointerInput(const HellEvent* event, void* data)
 {
     static bool lmbdown = false, mmbdown = false, rmbdown = false;
     static int  mx = 0, my = 0;
@@ -34,12 +33,12 @@ handlePointerInput(const Hell_Event* event, void* data)
     default:
         break;
     }
-    obdn_UpdateCamera_ArcBall(
-        scene, &target, hell_GetWindowWidth(hm.windows[0]),
-        hell_GetWindowHeight(hm.windows[0]), 0.16, mx, hell_GetMouseX(event),
-        my, hell_GetMouseY(event), false, lmbdown, false, false);
-    mx = hell_GetMouseX(event);
-    my = hell_GetMouseY(event);
+    onyx_update_camera_arc_ball(
+        scene, &target, hell_get_window_width(hm.windows[0]),
+        hell_get_window_height(hm.windows[0]), 0.16, mx, hell_get_mouse_x(event),
+        my, hell_get_mouse_y(event), false, lmbdown, false, false);
+    mx = hell_get_mouse_x(event);
+    my = hell_get_mouse_y(event);
     return true;
 }
 
@@ -49,20 +48,22 @@ frame(i64 fi, i64 dt)
     u32 f = fi % 2;
 
     VkCommandBuffer   cmdbuf = cmdpool.cmdbufs[f];
-    const Obdn_Frame* frame =
-        obdn_AcquireSwapchainFrame(swapchain, 0, img_acq_semas[f]);
+    OnyxSwapchainImage frame =
+        onyx_acquire_swapchain_image(swapchain);
 
-    obdn_WaitForFence(orb.device, &fences[f]);
+    onyx_wait_for_fence(orb.device, &fences[f]);
     vkResetCommandBuffer(cmdbuf, 0);
 
     // Mat4 cam = obdn_SceneGetCameraXform(scene);
     // coal_PrintMat4(cam);
+    unsigned int scwidth = onyx_get_swapchain_width(swapchain);
+    unsigned int scheight = onyx_get_swapchain_height(swapchain);
 
-    obdn_BeginCommandBuffer(cmdbuf);
+    onyx_begin_command_buffer(cmdbuf);
 
-    woad_Render(scene, frame, 0, 0, frame->width, frame->height, cmdbuf);
+    woad_Render(scene, frame, 0, 0, scwidth, scheight, cmdbuf);
 
-    obdn_EndCommandBuffer(cmdbuf);
+    onyx_end_command_buffer(cmdbuf);
 
     VkSubmitInfo si = obdn_SubmitInfo(
         1, &img_acq_semas[f],
