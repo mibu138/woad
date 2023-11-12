@@ -70,6 +70,7 @@ main(int argc, char* argv[])
     ExampleInterface ex = {
         .init_scene_prims = init_scene_prims,
         .init_scene_lights = NULL,
+        .enable_ray_tracing = true,
     };
     example_main(&ex);
     return 0;

@@ -21,6 +21,7 @@ HellWindow *window;
 typedef struct ExampleInterface {
     void (*init_scene_prims)(OnyxScene *scene);
     void (*init_scene_lights)(OnyxScene *scene);
+    bool enable_ray_tracing;
 } ExampleInterface;
 
 static void default_init_scene_prims(OnyxScene *scene)
@@ -157,7 +158,7 @@ example_main(ExampleInterface *ex)
     }
 
     hell_open_mouth(0, &hm);
-    OnyxInstanceParms ip = {.enable_ray_tracing = false,
+    OnyxInstanceParms ip = {.enable_ray_tracing = ex->enable_ray_tracing ? true : false,
                              .surface_type = ONYX_SURFACE_TYPE_XCB};
     onyx_create_orb(&ip, 50, 50, 200, 0, 0, &orb);
     swapchain = onyx_alloc_swapchain();
@@ -167,7 +168,7 @@ example_main(ExampleInterface *ex)
 
     woad_Init(orb.instance, orb.memory, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-              swapchain, WOAD_SETTINGS_NO_RAYTRACE_BIT);
+              swapchain, ex->enable_ray_tracing ? 0 : WOAD_SETTINGS_NO_RAYTRACE_BIT);
 
     scene = onyx_alloc_scene();
     onyx_create_scene(hm.grimoire, orb.memory, 1, 1, 0.01, 100, scene);

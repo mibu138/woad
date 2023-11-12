@@ -1259,16 +1259,19 @@ buildAccelerationStructures(const OnyxScene* scene)
     if (tlas.buffer_region.size != 0)
         onyx_destroy_acceleration_struct(device, &tlas);
     hell_array_clear(&blas_array);
+
     if (prim_count > 0)
     {
         for (int i = 0; i < prim_count; i++)
         {
+            if (prims[i].flags & ONYX_PRIM_INVISIBLE_BIT)
+                continue;
             AccelerationStructure blas = {};
             onyx_build_blas(memory, prims[i].geo, &blas);
             hell_array_push(&blas_array, &blas);
             hell_array_push(&xforms, &prims[i].xform);
         }
-        onyx_build_tlas(memory, prim_count, blas_array.elems, xforms.elems,
+        onyx_build_tlas(memory, blas_array.count, blas_array.elems, xforms.elems,
                        &tlas);
     }
     hell_destroy_array(&xforms, NULL);
