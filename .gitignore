@@ -8,3 +8,4 @@ shaders/spv/
 deps
 build/
 .cache
+.gdb_history

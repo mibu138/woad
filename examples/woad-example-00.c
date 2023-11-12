@@ -25,21 +25,36 @@ handlePointerInput(const HellEvent* event, void* data)
     static bool lmbdown = false, mmbdown = false, rmbdown = false;
     static int  mx = 0, my = 0;
     static Vec3 target = {0, 0, 0};
+    uint8_t button;
     switch (event->type)
     {
     case HELL_EVENT_TYPE_MOUSEUP:
-        lmbdown = false;
+        button = hell_get_event_button_code(event);
+        printf("button %d\n", button);
+        if (button == HELL_MOUSE_LEFT)
+            lmbdown = false;
+        if (button == HELL_MOUSE_RIGHT)
+            rmbdown = false;
+        if (button == HELL_MOUSE_MID)
+            mmbdown = false;
         break;
     case HELL_EVENT_TYPE_MOUSEDOWN:
-        lmbdown = true;
+        button = hell_get_event_button_code(event);
+        printf("button %d\n", button);
+        if (button == HELL_MOUSE_LEFT)
+            lmbdown = true;
+        if (button == HELL_MOUSE_RIGHT)
+            rmbdown = true;
+        if (button == HELL_MOUSE_MID)
+            mmbdown = true;
         break;
     default:
         break;
     }
     onyx_update_camera_arc_ball(
         scene, &target, hell_get_window_width(hm.windows[0]),
-        hell_get_window_height(hm.windows[0]), 0.16, mx, hell_get_mouse_x(event),
-        my, hell_get_mouse_y(event), false, lmbdown, false, false);
+        hell_get_window_height(hm.windows[0]), 0.016, mx, hell_get_mouse_x(event),
+        my, hell_get_mouse_y(event), mmbdown, lmbdown, rmbdown, false);
     mx = hell_get_mouse_x(event);
     my = hell_get_mouse_y(event);
     return true;
@@ -127,15 +142,7 @@ main(int argc, char* argv[])
 
     hell_subscribe(hm.eventqueue, HELL_EVENT_MASK_POINTER_BIT,
                    hell_get_window_i_d(hm.windows[0]), handlePointerInput, NULL);
-    while (true)
-    {
-        hell_begin_frame(&hm);
-        hell_frame(&hm);
-        frame(hm.frame_count, hm.frame_delta);
-        hell_end_frame(&hm);
-        usleep(5000);
-        //if (hm.frame_count > 0) hell_exit(0);
-    }
+    hell_loop(&hm, frame);
     hell_close_hellmouth(&hm);
     return 0;
 }

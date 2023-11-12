@@ -1448,20 +1448,21 @@ woad_Cleanup(void)
 WoadFrame
 woad_Frame(const OnyxSwapchainImage *img)
 {
-    static int64_t last_img_uuid = -1;
+    // track uuid for each swapimage
+    static int64_t last_img_uuids[2] = {-1, -1};
 
     const uint32_t idx = img->index;
     int64_t cur_uuid = img->swapchain->image_uuid[idx];
 
-    bool dirty = last_img_uuid != cur_uuid;
-    last_img_uuid = cur_uuid;
+    bool dirty = last_img_uuids[idx] != cur_uuid;
+    last_img_uuids[idx] = cur_uuid;
 
     WoadFrame f = {
         .dirty = dirty,
         .format = onyx_get_swapchain_format(img->swapchain),
         .width = onyx_get_swapchain_width(img->swapchain),
         .height = onyx_get_swapchain_height(img->swapchain),
-        .index = img->index,
+        .index = idx,
         .view = onyx_get_swapchain_image_view(img->swapchain, idx),
     };
 
