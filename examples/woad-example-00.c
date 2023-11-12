@@ -10,13 +10,25 @@ OnyxGeometryTemplate geo_template = {
     .flags = 0
 };
 
-#define MODEL_PATH_1 "pome/assets/Box/glTF-Binary/Box.glb"
-#define MODEL_PATH_2 "pome/assets/BoomBox/glTF-Binary/BoomBox.glb"
+typedef struct Model {
+    const char *path;
+    float      scale;
+    float      y_rot;
+} Model;
+
+static const Model models[] = {
+    { "pome/assets/Box/glTF-Binary/Box.glb", 1.0, 0.0 },
+    { "pome/assets/BoomBox/glTF-Binary/BoomBox.glb", 50.0, COAL_PI },
+};
+
+#define MODEL_NUM 1
 
 static void init_scene_prims(OnyxScene *scene)
 {
     int err = 0;
-    err = hell_gltf_init(MODEL_PATH_2, &gltf_data);
+    const Model model = models[MODEL_NUM];
+
+    err = hell_gltf_init(model.path, &gltf_data);
 
     assert(!err);
 
@@ -26,7 +38,11 @@ static void init_scene_prims(OnyxScene *scene)
 
     hell_gltf_term(&gltf_data);
 
-    onyx_scene_add_prim(scene, &geo, COAL_MAT4_IDENT, (OnyxMaterialHandle){0});
+    CoalMat4 xform = COAL_MAT4_IDENT;
+    xform = coal_scale_uniform_mat4(model.scale, xform);
+    xform = coal_rotate_y_mat4(model.y_rot, xform);
+
+    onyx_scene_add_prim(scene, &geo, xform, (OnyxMaterialHandle){0});
 }
 
 int

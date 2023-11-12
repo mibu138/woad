@@ -58,7 +58,9 @@ handlePointerInput(const HellEvent* event, void* data)
     static bool lmbdown = false, mmbdown = false, rmbdown = false;
     static int  mx = 0, my = 0;
     static Vec3 target = {0, 0, 0};
+    bool home = false;
     uint8_t button;
+
     switch (event->type)
     {
     case HELL_EVENT_TYPE_MOUSEUP:
@@ -79,6 +81,12 @@ handlePointerInput(const HellEvent* event, void* data)
         if (button == HELL_MOUSE_MID)
             mmbdown = true;
         break;
+    case HELL_EVENT_TYPE_KEYDOWN:
+        button = hell_get_event_key_code(event);
+        if (button == HELL_KEY_G)
+        {
+            home = true;
+        }
     default:
         break;
     }
@@ -88,7 +96,7 @@ handlePointerInput(const HellEvent* event, void* data)
     onyx_update_camera_arc_ball(
         scene, &target, w,
         h, 0.016, mx, hell_get_mouse_x(event),
-        my, hell_get_mouse_y(event), mmbdown, lmbdown, rmbdown, false);
+        my, hell_get_mouse_y(event), mmbdown, lmbdown, rmbdown, home);
     mx = hell_get_mouse_x(event);
     my = hell_get_mouse_y(event);
     return true;
@@ -175,7 +183,7 @@ example_main(ExampleInterface *ex)
     onyx_create_fences(orb.device, true, 2, fences);
     onyx_create_semaphores(orb.device, 2, rendered_semas);
 
-    hell_subscribe(hm.eventqueue, HELL_EVENT_MASK_POINTER_BIT,
+    hell_subscribe(hm.eventqueue, HELL_EVENT_MASK_POINTER_BIT | HELL_EVENT_MASK_KEY_BIT,
                    hell_get_window_i_d(hm.windows[0]), handlePointerInput, NULL);
     hell_loop(&hm, frame);
     hell_close_hellmouth(&hm);
