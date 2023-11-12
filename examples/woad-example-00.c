@@ -2,6 +2,7 @@
 
 HellGltfData gltf_data;
 OnyxGeometry geo;
+OnyxGeometry ground;
 OnyxGeometryTemplate geo_template = {
     .attribute_count = 3,
     .attribute_sizes = {12, 12, 8},
@@ -42,7 +43,25 @@ static void init_scene_prims(OnyxScene *scene)
     xform = coal_scale_uniform_mat4(model.scale, xform);
     xform = coal_rotate_y_mat4(model.y_rot, xform);
 
-    onyx_scene_add_prim(scene, &geo, xform, (OnyxMaterialHandle){0});
+    ground = onyx_create_cube(orb.memory, false);
+    CoalMat4 ground_xform = COAL_MAT4_IDENT;
+    ground_xform = coal_translate_mat4((CoalVec3){0, -1, 0}, ground_xform);
+    ground_xform = coal_scale_non_uniform_mat4((CoalVec3){1.5, 1.0, 1.5}, ground_xform);
+
+    OnyxMaterialHandle material = onyx_scene_create_material(
+            scene, (CoalVec3){0.9, 0.7, 0.1}, 0.8, 
+            (OnyxTextureHandle){0},
+            (OnyxTextureHandle){0},
+            (OnyxTextureHandle){0});
+
+    OnyxMaterialHandle ground_material = onyx_scene_create_material(
+            scene, (CoalVec3){0.6, 0.6, 0.62}, 0.9, 
+            (OnyxTextureHandle){0},
+            (OnyxTextureHandle){0},
+            (OnyxTextureHandle){0});
+
+    onyx_scene_add_prim(scene, &geo, xform, material);
+    onyx_scene_add_prim(scene, &ground, ground_xform, ground_material);
 }
 
 int
