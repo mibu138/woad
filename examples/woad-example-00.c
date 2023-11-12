@@ -51,9 +51,12 @@ handlePointerInput(const HellEvent* event, void* data)
     default:
         break;
     }
+    int w, h;
+    w = hell_get_window_width(hm.windows[0]);
+    h = hell_get_window_height(hm.windows[0]);
     onyx_update_camera_arc_ball(
-        scene, &target, hell_get_window_width(hm.windows[0]),
-        hell_get_window_height(hm.windows[0]), 0.016, mx, hell_get_mouse_x(event),
+        scene, &target, w,
+        h, 0.016, mx, hell_get_mouse_x(event),
         my, hell_get_mouse_y(event), mmbdown, lmbdown, rmbdown, false);
     mx = hell_get_mouse_x(event);
     my = hell_get_mouse_y(event);
