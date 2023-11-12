@@ -30,7 +30,6 @@ handlePointerInput(const HellEvent* event, void* data)
     {
     case HELL_EVENT_TYPE_MOUSEUP:
         button = hell_get_event_button_code(event);
-        printf("button %d\n", button);
         if (button == HELL_MOUSE_LEFT)
             lmbdown = false;
         if (button == HELL_MOUSE_RIGHT)
@@ -40,7 +39,6 @@ handlePointerInput(const HellEvent* event, void* data)
         break;
     case HELL_EVENT_TYPE_MOUSEDOWN:
         button = hell_get_event_button_code(event);
-        printf("button %d\n", button);
         if (button == HELL_MOUSE_LEFT)
             lmbdown = true;
         if (button == HELL_MOUSE_RIGHT)
