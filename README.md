@@ -36,9 +36,9 @@ This is essentially a library, but there is one example binary included. After t
 ./build/examples/ex00 --raytrace
 ```
 
-That will run a simple demo. The `--raytrace` flag enables enables ray-tracing, which is currently only used for shadows.
+That will run a simple demo.
 
-I don't handle the case where ray-tracing is not available on the system. If it fails for that reason you can try omitting that flag. But, your shadows will not look as nice.
+The `--raytrace` flag enables enables ray-tracing, which is currently only used for shadows. I don't handle the case where ray-tracing is not available on the system. If it fails for that reason you can try omitting that flag. But, your shadows will not look as nice.
 
 Once running, the following controls are available:
 
