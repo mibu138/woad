@@ -3,6 +3,8 @@
 HellGltfData gltf_data;
 OnyxGeometry geo;
 OnyxGeometry ground;
+OnyxPrimitiveHandle geo_prim;
+OnyxPrimitiveHandle ground_prim;
 OnyxGeometryTemplate geo_template = {
     .attribute_count = 3,
     .attribute_sizes = {12, 12, 8},
@@ -60,8 +62,14 @@ static void init_scene_prims(OnyxScene *scene)
             (OnyxTextureHandle){0},
             (OnyxTextureHandle){0});
 
-    onyx_scene_add_prim(scene, &geo, xform, material);
-    onyx_scene_add_prim(scene, &ground, ground_xform, ground_material);
+    geo_prim = onyx_scene_add_prim(scene, &geo, xform, material);
+    ground_prim = onyx_scene_add_prim(scene, &ground, ground_xform, ground_material);
+}
+
+static void update_scene(OnyxScene *s, i64 fi, i64 dt)
+{
+    CoalMat4 xform = coal_rotate_y_mat4(0.01, COAL_MAT4_IDENT);
+    onyx_update_prim_xform(s, geo_prim, xform);
 }
 
 int
@@ -71,7 +79,8 @@ main(int argc, char* argv[])
         .init_scene_prims = init_scene_prims,
         .init_scene_lights = NULL,
         .enable_ray_tracing = true,
+        .update_scene = update_scene,
     };
-    example_main(&ex);
+    woad_example_main(&ex);
     return 0;
 }

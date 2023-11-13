@@ -1243,6 +1243,36 @@ updateMaterials(const OnyxScene* scene, uint32_t frameIndex)
            sizeof(Material) * matcount);
 }
 
+// possibly because transforms changed, we only need to rebuild the tlas
+// TODO merge this with buildAccelerationStructures
+static void
+rebuildTlas(const OnyxScene* scene)
+{
+    HellArray xforms;
+
+    hell_create_array_old(8, sizeof(CoalMat4), NULL, NULL, &xforms);
+
+    obint                  prim_count = 0;
+    const OnyxPrimitive*  prims = onyx_scene_get_primitives(scene, &prim_count);
+
+    if (tlas.buffer_region.size != 0)
+        onyx_destroy_acceleration_struct(device, &tlas);
+
+    if (prim_count > 0)
+    {
+        for (int i = 0; i < prim_count; i++)
+        {
+            if (prims[i].flags & ONYX_PRIM_INVISIBLE_BIT)
+                continue;
+            hell_array_push(&xforms, &prims[i].xform);
+        }
+        onyx_build_tlas(memory, blas_array.count, blas_array.elems, xforms.elems,
+                       &tlas);
+    }
+
+    hell_destroy_array(&xforms, NULL);
+}
+
 static void
 buildAccelerationStructures(const OnyxScene* scene)
 {
@@ -1302,9 +1332,6 @@ woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
         {
             lightsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         }
-        if (scene_dirt & ONYX_SCENE_XFORMS_BIT)
-        {
-        }
         if (scene_dirt & ONYX_SCENE_MATERIALS_BIT)
             materialsNeedUpdate = MAX_FRAMES_IN_FLIGHT;
         if (scene_dirt & ONYX_SCENE_TEXTURES_BIT)
@@ -1318,6 +1345,14 @@ woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
             if (!raytracing_disabled)
             {
                 buildAccelerationStructures(scene);
+                updateASDescriptors();
+            }
+        }
+        else if (scene_dirt & ONYX_SCENE_XFORMS_BIT)
+        {
+            if (!raytracing_disabled)
+            {
+                rebuildTlas(scene);
                 updateASDescriptors();
             }
         }

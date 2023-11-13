@@ -21,6 +21,7 @@ HellWindow *window;
 typedef struct ExampleInterface {
     void (*init_scene_prims)(OnyxScene *scene);
     void (*init_scene_lights)(OnyxScene *scene);
+    void (*update_scene)(OnyxScene *scene, i64 fi, i64 dt);
     bool enable_ray_tracing;
 } ExampleInterface;
 
@@ -45,16 +46,16 @@ static void default_init_scene_lights(OnyxScene *scene)
 }
 
 static ExampleInterface *
-default_interface()
+woad_example_default_interface()
 {
-    static ExampleInterface ex = {};
+    static ExampleInterface ex = {0};
     ex.init_scene_lights = default_init_scene_lights;
     ex.init_scene_prims = default_init_scene_prims;
     return &ex;
 }
 
 static bool
-handlePointerInput(const HellEvent* event, void* data)
+woad_example_handle_input(const HellEvent* event, void* data)
 {
     static bool lmbdown = false, mmbdown = false, rmbdown = false;
     static int  mx = 0, my = 0;
@@ -104,9 +105,10 @@ handlePointerInput(const HellEvent* event, void* data)
 }
 
 static void
-frame(i64 fi, i64 dt)
+woad_example_frame(i64 fi, i64 dt, void *user_data)
 {
     u32 f = fi % 2;
+    ExampleInterface *ex = user_data;
 
     VkCommandBuffer   cmdbuf = cmdpool.cmdbufs[f];
     OnyxSwapchainImage swap_img =
@@ -119,6 +121,9 @@ frame(i64 fi, i64 dt)
     // coal_PrintMat4(cam);
     unsigned int scwidth = onyx_get_swapchain_width(swapchain);
     unsigned int scheight = onyx_get_swapchain_height(swapchain);
+
+    if (ex->update_scene)
+        ex->update_scene(scene, fi, dt);
 
     WoadFrame frame = woad_Frame(&swap_img);
 
@@ -144,12 +149,12 @@ frame(i64 fi, i64 dt)
 }
 
 static int
-example_main(ExampleInterface *ex)
+woad_example_main(ExampleInterface *ex)
 {
     hell_print("Starting\n");
 
     if (!ex)
-        ex = default_interface();
+        ex = woad_example_default_interface();
     else {
         if (!ex->init_scene_lights)
             ex->init_scene_lights = default_init_scene_lights;
@@ -185,8 +190,8 @@ example_main(ExampleInterface *ex)
     onyx_create_semaphores(orb.device, 2, rendered_semas);
 
     hell_subscribe(hm.eventqueue, HELL_EVENT_MASK_POINTER_BIT | HELL_EVENT_MASK_KEY_BIT,
-                   hell_get_window_i_d(hm.windows[0]), handlePointerInput, NULL);
-    hell_loop(&hm, frame);
+                   hell_get_window_i_d(hm.windows[0]), woad_example_handle_input, NULL);
+    hell_loop(&hm, woad_example_frame, ex);
     hell_close_hellmouth(&hm);
     return 0;
 }
