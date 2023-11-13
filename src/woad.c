@@ -81,6 +81,8 @@ typedef struct {
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
+define_array_type(AccelerationStructure, accel_struct);
+
 static VkRenderPass gbufferRenderPass;
 static VkRenderPass deferredRenderPass;
 static uint32_t     graphic_queue_family_index;
@@ -107,8 +109,8 @@ static OnyxPrimitiveList pipelinePrimLists[GBUFFER_PIPELINE_COUNT];
 
 // raytrace stuff
 
-static HellArray            blas_array;
-static AccelerationStructure tlas;
+static AccelerationStructureArray blas_array;
+static AccelerationStructure tlas[MAX_FRAMES_IN_FLIGHT];
 
 // raytrace stuff
 
@@ -835,27 +837,24 @@ updateGbufferDescriptors(void)
 }
 
 static void
-updateASDescriptors(void)
+updateASDescriptors(int frame_index)
 {
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        VkWriteDescriptorSetAccelerationStructureKHR asInfo = {
-            .sType =
-                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
-            .accelerationStructureCount = 1,
-            .pAccelerationStructures    = &tlas.handle};
+    VkWriteDescriptorSetAccelerationStructureKHR asInfo = {
+        .sType =
+            VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+        .accelerationStructureCount = 1,
+        .pAccelerationStructures    = &tlas[frame_index].handle};
 
-        VkWriteDescriptorSet writeDS = {
-            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstArrayElement = 0,
-            .dstSet     = descriptorSets[i][DESC_SET_DEFERRED],
-            .dstBinding = 5,
-            .descriptorCount = 1,
-            .descriptorType  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-            .pNext           = &asInfo};
+    VkWriteDescriptorSet writeDS = {
+        .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstArrayElement = 0,
+        .dstSet     = descriptorSets[frame_index][DESC_SET_DEFERRED],
+        .dstBinding = 5,
+        .descriptorCount = 1,
+        .descriptorType  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+        .pNext           = &asInfo};
 
-        vkUpdateDescriptorSets(device, 1, &writeDS, 0, NULL);
-    }
+    vkUpdateDescriptorSets(device, 1, &writeDS, 0, NULL);
 }
 
 static void
@@ -1244,9 +1243,8 @@ updateMaterials(const OnyxScene* scene, uint32_t frameIndex)
 }
 
 // possibly because transforms changed, we only need to rebuild the tlas
-// TODO merge this with buildAccelerationStructures
 static void
-rebuildTlas(const OnyxScene* scene)
+buildTlas(const OnyxScene* scene, int frame_index)
 {
     HellArray xforms;
 
@@ -1255,19 +1253,21 @@ rebuildTlas(const OnyxScene* scene)
     obint                  prim_count = 0;
     const OnyxPrimitive*  prims = onyx_scene_get_primitives(scene, &prim_count);
 
-    if (tlas.buffer_region.size != 0)
-        onyx_destroy_acceleration_struct(device, &tlas);
+    if (tlas[frame_index].buffer_region.size != 0)
+        onyx_destroy_acceleration_struct(device, &tlas[frame_index]);
 
     if (prim_count > 0)
     {
         for (int i = 0; i < prim_count; i++)
         {
+            // note that we are assuming here that number of visible prims ==
+            // length of the blas array
             if (prims[i].flags & ONYX_PRIM_INVISIBLE_BIT)
                 continue;
             hell_array_push(&xforms, &prims[i].xform);
         }
         onyx_build_tlas(memory, blas_array.count, blas_array.elems, xforms.elems,
-                       &tlas);
+                       &tlas[frame_index]);
     }
 
     hell_destroy_array(&xforms, NULL);
@@ -1276,19 +1276,16 @@ rebuildTlas(const OnyxScene* scene)
 static void
 buildAccelerationStructures(const OnyxScene* scene)
 {
-    HellArray xforms;
-    hell_create_array_old(8, sizeof(CoalMat4), NULL, NULL, &xforms);
     obint                  prim_count = 0;
     const OnyxPrimitive*  prims = onyx_scene_get_primitives(scene, &prim_count);
-    AccelerationStructure* blasses = blas_array.elems;
+
     for (int i = 0; i < blas_array.count; i++)
     {
-        AccelerationStructure* blas = &blasses[i];
+        AccelerationStructure *blas = &blas_array.elems[i];
         onyx_destroy_acceleration_struct(device, blas);
     }
-    if (tlas.buffer_region.size != 0)
-        onyx_destroy_acceleration_struct(device, &tlas);
-    hell_array_clear(&blas_array);
+
+    accel_struct_arr_set_count(&blas_array, 0);
 
     if (prim_count > 0)
     {
@@ -1298,13 +1295,14 @@ buildAccelerationStructures(const OnyxScene* scene)
                 continue;
             AccelerationStructure blas = {};
             onyx_build_blas(memory, prims[i].geo, &blas);
-            hell_array_push(&blas_array, &blas);
-            hell_array_push(&xforms, &prims[i].xform);
+            accel_struct_arr_push(&blas_array, blas);
         }
-        onyx_build_tlas(memory, blas_array.count, blas_array.elems, xforms.elems,
-                       &tlas);
     }
-    hell_destroy_array(&xforms, NULL);
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        buildTlas(scene, i);
+    }
+
     printf(">>>>> Built acceleration structures\n");
 }
 
@@ -1315,6 +1313,7 @@ woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
     // assert(x + width  <= fb->width);
     // assert(y + height <= fb->height);
     static uint8_t cameraNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
+    static uint8_t asNeedUpdate        = MAX_FRAMES_IN_FLIGHT;
     // static uint8_t xformsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t lightsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t texturesNeedUpdate  = MAX_FRAMES_IN_FLIGHT;
@@ -1345,15 +1344,14 @@ woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
             if (!raytracing_disabled)
             {
                 buildAccelerationStructures(scene);
-                updateASDescriptors();
+                asNeedUpdate = MAX_FRAMES_IN_FLIGHT;
             }
         }
         else if (scene_dirt & ONYX_SCENE_XFORMS_BIT)
         {
             if (!raytracing_disabled)
             {
-                rebuildTlas(scene);
-                updateASDescriptors();
+                asNeedUpdate = MAX_FRAMES_IN_FLIGHT;
             }
         }
     }
@@ -1362,6 +1360,12 @@ woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
         onDirtyFrame(fb);
     }
 
+    if (asNeedUpdate)
+    {
+        buildTlas(scene, frameIndex);
+        updateASDescriptors(frameIndex);
+        asNeedUpdate--;
+    }
     if (cameraNeedUpdate)
     {
         updateCamera(scene, frameIndex);
@@ -1413,7 +1417,7 @@ woad_Init(const OnyxInstance* instance_, OnyxMemory* memory_,
         pipelinePrimLists[i] = onyx_create_prim_list(8);
     }
 
-    hell_create_array_old(4, sizeof(AccelerationStructure), NULL, NULL, &blas_array);
+    blas_array = accel_struct_arr_create(NULL);
 
     device = onyx_get_device(instance);
     graphic_queue_family_index =
@@ -1425,6 +1429,7 @@ woad_Init(const OnyxInstance* instance_, OnyxMemory* memory_,
     width = onyx_get_swapchain_width(swapchain);
     height = onyx_get_swapchain_height(swapchain);
     format = onyx_get_swapchain_format(swapchain);
+
 
     initAttachments(width, height);
     hell_print(">> Woad: attachments initialized. \n");
@@ -1472,11 +1477,11 @@ woad_Cleanup(void)
         if (blas->buffer_region.size != 0)
             onyx_destroy_acceleration_struct(device, blas);
     }
-    if (tlas.buffer_region.size != 0)
-        onyx_destroy_acceleration_struct(device, &tlas);
     onyx_destroy_shader_binding_table(&shaderBindingTable);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
+        if (tlas[i].buffer_region.size != 0)
+            onyx_destroy_acceleration_struct(device, &tlas[i]);
         vkDestroyDescriptorPool(device, descriptorPool, NULL);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayouts[i], NULL);
         onyx_free_buffer(&cameraBuffers[i]);
