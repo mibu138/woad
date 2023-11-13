@@ -16,7 +16,7 @@ If you are missing any of these, they can likely be installed from your system p
 
 ### Build instructions
 
-I've included `make.sh` to simplify the build steps. It first unpacks a tarball, which includes more source code, and then creates a build directory, changes to it, and invokes cmake.
+I've included `make.sh` to simplify the build steps. It first unpacks a tarball, which contains assets and more source code, and then creates a build directory, changes to it, and invokes cmake.
 
 I recommend taking a look at `make.sh` before running it to verify it is not doing anything evil.
 
