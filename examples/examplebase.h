@@ -89,6 +89,10 @@ woad_example_handle_input(const HellEvent* event, void* data)
         {
             home = true;
         }
+        if (button == HELL_KEY_ESC)
+        {
+            exit(0);
+        }
     default:
         break;
     }
