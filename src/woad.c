@@ -1141,10 +1141,7 @@ updateRenderCommands(VkCommandBuffer cmdBuf, const OnyxScene* scene,
 
     generateGBuffer(cmdBuf, scene, frameIndex, frame->width, frame->height);
 
-    if (raytracing_disabled)
-    {
-    }
-    else
+    if (!raytracing_disabled)
     {
         onyx_v_MemoryBarrier(
             cmdBuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -1312,8 +1309,8 @@ woad_Render(const OnyxScene* scene, const WoadFrame* fb, uint32_t x,
 {
     // assert(x + width  <= fb->width);
     // assert(y + height <= fb->height);
+    static uint8_t asNeedUpdate        = 0;
     static uint8_t cameraNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
-    static uint8_t asNeedUpdate        = MAX_FRAMES_IN_FLIGHT;
     // static uint8_t xformsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t lightsNeedUpdate    = MAX_FRAMES_IN_FLIGHT;
     static uint8_t texturesNeedUpdate  = MAX_FRAMES_IN_FLIGHT;

@@ -75,10 +75,21 @@ static void update_scene(OnyxScene *s, i64 fi, i64 dt)
 int
 main(int argc, char* argv[])
 {
+    bool ray_tracing = false;
+    if (argc >= 2) {
+        const char *arg = argv[1];
+        if (!strcmp(arg, "--raytrace"))
+            ray_tracing = true;
+        else {
+            printf("Usage: %s [--raytrace]\n", argv[0]);
+            printf("Options: \n\t--raytrace\tEnable ray tracing.\n");
+            exit(1);
+        }
+    } 
     ExampleInterface ex = {
         .init_scene_prims = init_scene_prims,
         .init_scene_lights = NULL,
-        .enable_ray_tracing = true,
+        .enable_ray_tracing = ray_tracing,
         .update_scene = update_scene,
     };
     woad_example_main(&ex);
